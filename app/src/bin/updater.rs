@@ -97,11 +97,15 @@ fn main() {
         Ok(b) => b,
         Err(e1) => {
             if !args.mirror_url.is_empty() {
-                eprintln!("[updater] primary failed ({e1}); trying mirror {}", args.mirror_url);
+                eprintln!(
+                    "[updater] primary failed ({e1}); trying mirror {}",
+                    args.mirror_url
+                );
                 match fetch_verified(&args.mirror_url, &args.sha256) {
                     Ok(b) => b,
                     Err(e2) => die(&format!(
-                        "Update download failed.\nprimary: {e1}\nmirror:  {e2}")),
+                        "Update download failed.\nprimary: {e1}\nmirror:  {e2}"
+                    )),
                 }
             } else {
                 die(&format!("Update download failed:\n{e1}"));
@@ -128,7 +132,9 @@ fn fetch_verified(url: &str, sha256_hex: &str) -> Result<Vec<u8>, String> {
     let bytes = update::download(url, 512 * 1024 * 1024).map_err(|e| e.to_string())?;
     let got = update::sha256_hex(&bytes);
     if !got.eq_ignore_ascii_case(sha256_hex.trim()) {
-        return Err(format!("checksum mismatch (expected {sha256_hex}, got {got})"));
+        return Err(format!(
+            "checksum mismatch (expected {sha256_hex}, got {got})"
+        ));
     }
     Ok(bytes)
 }
@@ -140,11 +146,16 @@ fn restage_and_exec(args: &Args) -> std::io::Result<()> {
     std::fs::copy(&me, &staged)?;
     let mut cmd = Command::new(&staged);
     cmd.arg("--staged")
-        .arg("--url").arg(&args.url)
-        .arg("--sha256").arg(&args.sha256)
-        .arg("--dir").arg(&args.dir)
-        .arg("--relaunch").arg(&args.relaunch)
-        .arg("--wait-pid").arg(args.wait_pid.to_string());
+        .arg("--url")
+        .arg(&args.url)
+        .arg("--sha256")
+        .arg(&args.sha256)
+        .arg("--dir")
+        .arg(&args.dir)
+        .arg("--relaunch")
+        .arg(&args.relaunch)
+        .arg("--wait-pid")
+        .arg(args.wait_pid.to_string());
     if !args.mirror_url.is_empty() {
         cmd.arg("--mirror-url").arg(&args.mirror_url);
     }
@@ -304,8 +315,14 @@ fn extract_over(zip_bytes: &[u8], install_dir: &Path) -> anyhow::Result<()> {
         // ITS OWN root — it keeps interior `..`, so `OpenAirServer/../evil`
         // passes and dropping the wrapper leaves `../evil`, one level outside the
         // staging dir. Re-check what survived the strip; a real dist zip has none.
-        if rel.components().any(|c| matches!(c, std::path::Component::ParentDir)) {
-            return Err(anyhow!("zip entry {} escapes the install dir", safe.display()));
+        if rel
+            .components()
+            .any(|c| matches!(c, std::path::Component::ParentDir))
+        {
+            return Err(anyhow!(
+                "zip entry {} escapes the install dir",
+                safe.display()
+            ));
         }
         let dest = install_dir.join(&rel);
         if entry.is_dir() {
@@ -376,7 +393,10 @@ mod tests {
         ]);
         install_staged(&zip, &dir).unwrap();
 
-        assert_eq!(std::fs::read(dir.join("popyachsa-airplay.exe")).unwrap(), b"new");
+        assert_eq!(
+            std::fs::read(dir.join("popyachsa-airplay.exe")).unwrap(),
+            b"new"
+        );
         assert_eq!(std::fs::read(dir.join("locales/ru.json")).unwrap(), b"new");
         assert!(dir.join("uxplay-core.dll").exists());
         assert_eq!(std::fs::read(dir.join("uninstall.exe")).unwrap(), b"nsis");
@@ -394,7 +414,10 @@ mod tests {
         std::fs::write(dir.join("popyachsa-airplay.exe"), b"old").unwrap();
 
         assert!(install_staged(b"not a zip at all", &dir).is_err());
-        assert_eq!(std::fs::read(dir.join("popyachsa-airplay.exe")).unwrap(), b"old");
+        assert_eq!(
+            std::fs::read(dir.join("popyachsa-airplay.exe")).unwrap(),
+            b"old"
+        );
         let _ = std::fs::remove_dir_all(&root);
     }
 
@@ -417,7 +440,10 @@ mod tests {
 
         assert!(install_staged(&zip, &dir).is_err());
         assert!(!root.join("pwned.txt").exists());
-        assert_eq!(std::fs::read(dir.join("popyachsa-airplay.exe")).unwrap(), b"old");
+        assert_eq!(
+            std::fs::read(dir.join("popyachsa-airplay.exe")).unwrap(),
+            b"old"
+        );
         let _ = std::fs::remove_dir_all(&root);
     }
 
@@ -433,9 +459,16 @@ mod tests {
         std::fs::write(old.join("popyachsa-airplay.exe"), b"old").unwrap();
         std::fs::write(old.join("uninstall.exe"), b"nsis").unwrap();
 
-        install_staged(&make_zip(&[("popyachsa-airplay.exe", b"new" as &[u8])]), &dir).unwrap();
+        install_staged(
+            &make_zip(&[("popyachsa-airplay.exe", b"new" as &[u8])]),
+            &dir,
+        )
+        .unwrap();
 
-        assert_eq!(std::fs::read(dir.join("popyachsa-airplay.exe")).unwrap(), b"new");
+        assert_eq!(
+            std::fs::read(dir.join("popyachsa-airplay.exe")).unwrap(),
+            b"new"
+        );
         assert_eq!(std::fs::read(dir.join("uninstall.exe")).unwrap(), b"nsis");
         let _ = std::fs::remove_dir_all(&root);
     }

@@ -6,23 +6,53 @@
 /// Supported UI languages (16, matching the music-bot set).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Lang {
-    En, Ru, Uk, De, Fr, Es, It, PtBr, Pl, Nl, Tr, ZhCn, Ja, Ko, Ar, Hi,
+    En,
+    Ru,
+    Uk,
+    De,
+    Fr,
+    Es,
+    It,
+    PtBr,
+    Pl,
+    Nl,
+    Tr,
+    ZhCn,
+    Ja,
+    Ko,
+    Ar,
+    Hi,
 }
 
 impl Lang {
     /// All languages, in dropdown order (English first, then by native name).
     pub fn all() -> [Lang; 16] {
         use Lang::*;
-        [En, Ru, Uk, De, Es, Fr, It, PtBr, Pl, Nl, Tr, ZhCn, Ja, Ko, Ar, Hi]
+        [
+            En, Ru, Uk, De, Es, Fr, It, PtBr, Pl, Nl, Tr, ZhCn, Ja, Ko, Ar, Hi,
+        ]
     }
 
     /// BCP-47-ish code persisted in config.
     pub fn code(self) -> &'static str {
         use Lang::*;
         match self {
-            En => "en", Ru => "ru", Uk => "uk", De => "de", Fr => "fr", Es => "es",
-            It => "it", PtBr => "pt-BR", Pl => "pl", Nl => "nl", Tr => "tr",
-            ZhCn => "zh-CN", Ja => "ja", Ko => "ko", Ar => "ar", Hi => "hi",
+            En => "en",
+            Ru => "ru",
+            Uk => "uk",
+            De => "de",
+            Fr => "fr",
+            Es => "es",
+            It => "it",
+            PtBr => "pt-BR",
+            Pl => "pl",
+            Nl => "nl",
+            Tr => "tr",
+            ZhCn => "zh-CN",
+            Ja => "ja",
+            Ko => "ko",
+            Ar => "ar",
+            Hi => "hi",
         }
     }
 
@@ -30,10 +60,22 @@ impl Lang {
     pub fn native_name(self) -> &'static str {
         use Lang::*;
         match self {
-            En => "English", Ru => "Русский", Uk => "Українська", De => "Deutsch",
-            Fr => "Français", Es => "Español", It => "Italiano", PtBr => "Português (BR)",
-            Pl => "Polski", Nl => "Nederlands", Tr => "Türkçe", ZhCn => "中文 (简体)",
-            Ja => "日本語", Ko => "한국어", Ar => "العربية", Hi => "हिन्दी",
+            En => "English",
+            Ru => "Русский",
+            Uk => "Українська",
+            De => "Deutsch",
+            Fr => "Français",
+            Es => "Español",
+            It => "Italiano",
+            PtBr => "Português (BR)",
+            Pl => "Polski",
+            Nl => "Nederlands",
+            Tr => "Türkçe",
+            ZhCn => "中文 (简体)",
+            Ja => "日本語",
+            Ko => "한국어",
+            Ar => "العربية",
+            Hi => "हिन्दी",
         }
     }
 
@@ -42,7 +84,9 @@ impl Lang {
         if value.is_empty() || value.eq_ignore_ascii_case("auto") {
             return Lang::detect();
         }
-        Lang::all().into_iter().find(|l| l.code().eq_ignore_ascii_case(value))
+        Lang::all()
+            .into_iter()
+            .find(|l| l.code().eq_ignore_ascii_case(value))
             .unwrap_or_else(Lang::detect)
     }
 
@@ -58,9 +102,22 @@ impl Lang {
     fn detect_from(langid: u16) -> Lang {
         use Lang::*;
         match langid & 0x3ff {
-            0x09 => En, 0x19 => Ru, 0x22 => Uk, 0x07 => De, 0x0c => Fr, 0x0a => Es,
-            0x10 => It, 0x16 => PtBr, 0x15 => Pl, 0x13 => Nl, 0x1f => Tr, 0x04 => ZhCn,
-            0x11 => Ja, 0x12 => Ko, 0x01 => Ar, 0x39 => Hi,
+            0x09 => En,
+            0x19 => Ru,
+            0x22 => Uk,
+            0x07 => De,
+            0x0c => Fr,
+            0x0a => Es,
+            0x10 => It,
+            0x16 => PtBr,
+            0x15 => Pl,
+            0x13 => Nl,
+            0x1f => Tr,
+            0x04 => ZhCn,
+            0x11 => Ja,
+            0x12 => Ko,
+            0x01 => Ar,
+            0x39 => Hi,
             _ => En,
         }
     }
@@ -96,9 +153,21 @@ fn os_ui_primary_lang() -> u16 {
 fn langid_from_locale(locale: &str) -> u16 {
     // `get` (not slicing) so a 1-char or multi-byte value can't panic.
     match locale.get(..2).unwrap_or("").to_ascii_lowercase().as_str() {
-        "ru" => 0x19, "uk" => 0x22, "de" => 0x07, "fr" => 0x0c, "es" => 0x0a,
-        "it" => 0x10, "pt" => 0x16, "pl" => 0x15, "nl" => 0x13, "tr" => 0x1f,
-        "zh" => 0x04, "ja" => 0x11, "ko" => 0x12, "ar" => 0x01, "hi" => 0x39,
+        "ru" => 0x19,
+        "uk" => 0x22,
+        "de" => 0x07,
+        "fr" => 0x0c,
+        "es" => 0x0a,
+        "it" => 0x10,
+        "pt" => 0x16,
+        "pl" => 0x15,
+        "nl" => 0x13,
+        "tr" => 0x1f,
+        "zh" => 0x04,
+        "ja" => 0x11,
+        "ko" => 0x12,
+        "ar" => 0x01,
+        "hi" => 0x39,
         _ => 0x09,
     }
 }
@@ -110,7 +179,10 @@ mod tests {
     #[test]
     fn locale_maps_to_lang() {
         // The whole point of the fix: a Russian desktop must not get English.
-        assert_eq!(Lang::detect_from(langid_from_locale("ru_RU.UTF-8")), Lang::Ru);
+        assert_eq!(
+            Lang::detect_from(langid_from_locale("ru_RU.UTF-8")),
+            Lang::Ru
+        );
         assert_eq!(Lang::detect_from(langid_from_locale("pt_BR")), Lang::PtBr);
         assert_eq!(Lang::detect_from(langid_from_locale("zh-Hans")), Lang::ZhCn);
         // Fallbacks that must stay English, including the panic bait.
@@ -214,9 +286,22 @@ pub struct Strings {
 pub fn s(lang: Lang) -> &'static Strings {
     use Lang::*;
     match lang {
-        En => &EN, Ru => &RU, Uk => &UK, De => &DE, Fr => &FR, Es => &ES, It => &IT,
-        PtBr => &PT_BR, Pl => &PL, Nl => &NL, Tr => &TR, ZhCn => &ZH_CN, Ja => &JA,
-        Ko => &KO, Ar => &AR, Hi => &HI,
+        En => &EN,
+        Ru => &RU,
+        Uk => &UK,
+        De => &DE,
+        Fr => &FR,
+        Es => &ES,
+        It => &IT,
+        PtBr => &PT_BR,
+        Pl => &PL,
+        Nl => &NL,
+        Tr => &TR,
+        ZhCn => &ZH_CN,
+        Ja => &JA,
+        Ko => &KO,
+        Ar => &AR,
+        Hi => &HI,
     }
 }
 

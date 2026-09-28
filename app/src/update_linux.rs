@@ -124,7 +124,10 @@ fn finish_verified_swap(work: &Path, target: &Path, m: &Manifest) -> Result<Path
     let got = update::sha256_hex(&bytes);
     if !got.eq_ignore_ascii_case(m.sha256.trim()) {
         let _ = std::fs::remove_file(work);
-        bail!("staged AppImage sha256 {got} != signed {} — refusing", m.sha256.trim());
+        bail!(
+            "staged AppImage sha256 {got} != signed {} — refusing",
+            m.sha256.trim()
+        );
     }
     #[cfg(unix)]
     {

@@ -34,10 +34,20 @@ mod imp {
 
     fn open_run(write: bool) -> Result<HKEY> {
         let mut hkey = HKEY::default();
-        let access = if write { KEY_READ | KEY_WRITE } else { KEY_READ };
+        let access = if write {
+            KEY_READ | KEY_WRITE
+        } else {
+            KEY_READ
+        };
         let path = to_wide_z(RUN_KEY);
         let r = unsafe {
-            RegOpenKeyExW(HKEY_CURRENT_USER, PCWSTR(path.as_ptr()), None, access, &mut hkey)
+            RegOpenKeyExW(
+                HKEY_CURRENT_USER,
+                PCWSTR(path.as_ptr()),
+                None,
+                access,
+                &mut hkey,
+            )
         };
         if r != ERROR_SUCCESS {
             return Err(anyhow!("RegOpenKeyExW({RUN_KEY}) failed: {:?}", r));
@@ -46,15 +56,25 @@ mod imp {
     }
 
     pub fn is_enabled() -> bool {
-        let Ok(hkey) = open_run(false) else { return false };
+        let Ok(hkey) = open_run(false) else {
+            return false;
+        };
         let name = to_wide_z(APP_ID);
         let mut typ = 0u32;
         let mut size = 0u32;
         let r = unsafe {
-            RegQueryValueExW(hkey, PCWSTR(name.as_ptr()), None,
-                Some(&mut typ as *mut u32 as *mut _), None, Some(&mut size))
+            RegQueryValueExW(
+                hkey,
+                PCWSTR(name.as_ptr()),
+                None,
+                Some(&mut typ as *mut u32 as *mut _),
+                None,
+                Some(&mut size),
+            )
         };
-        unsafe { let _ = RegCloseKey(hkey); }
+        unsafe {
+            let _ = RegCloseKey(hkey);
+        }
         r == ERROR_SUCCESS && size > 0
     }
 
@@ -65,16 +85,33 @@ mod imp {
             let cmd = autostart_command()?;
             let value = to_wide_z(&cmd);
             unsafe {
-                RegSetValueExW(hkey, PCWSTR(name.as_ptr()), None, REG_SZ,
+                RegSetValueExW(
+                    hkey,
+                    PCWSTR(name.as_ptr()),
+                    None,
+                    REG_SZ,
                     Some(std::slice::from_raw_parts(
-                        value.as_ptr() as *const u8, value.len() * std::mem::size_of::<u16>())))
+                        value.as_ptr() as *const u8,
+                        value.len() * std::mem::size_of::<u16>(),
+                    )),
+                )
             }
         } else {
             let r = unsafe { RegDeleteValueW(hkey, PCWSTR(name.as_ptr())) };
-            if r == WIN32_ERROR(ERROR_FILE_NOT_FOUND.0) { ERROR_SUCCESS } else { r }
+            if r == WIN32_ERROR(ERROR_FILE_NOT_FOUND.0) {
+                ERROR_SUCCESS
+            } else {
+                r
+            }
         };
-        unsafe { let _ = RegCloseKey(hkey); }
-        if r == ERROR_SUCCESS { Ok(()) } else { Err(anyhow!("RegSet/Delete failed: {:?}", r)) }
+        unsafe {
+            let _ = RegCloseKey(hkey);
+        }
+        if r == ERROR_SUCCESS {
+            Ok(())
+        } else {
+            Err(anyhow!("RegSet/Delete failed: {:?}", r))
+        }
     }
 }
 
@@ -87,7 +124,9 @@ mod imp {
 
     fn launch_agent_path() -> Result<PathBuf> {
         let home = dirs::home_dir().ok_or_else(|| anyhow!("no home directory"))?;
-        Ok(home.join("Library/LaunchAgents").join(format!("{LABEL}.plist")))
+        Ok(home
+            .join("Library/LaunchAgents")
+            .join(format!("{LABEL}.plist")))
     }
 
     fn xml_escape(value: &str) -> String {
@@ -188,7 +227,13 @@ pub use imp::{is_enabled, set};
 /// current exe path after a move/reinstall — `is_enabled()` only checks existence,
 /// not that the recorded path still points at the running binary.
 pub fn sync(desired: bool) {
-    let r = if desired { set(true) } else if is_enabled() { set(false) } else { Ok(()) };
+    let r = if desired {
+        set(true)
+    } else if is_enabled() {
+        set(false)
+    } else {
+        Ok(())
+    };
     if let Err(e) = r {
         eprintln!("[autostart] {e}");
     }

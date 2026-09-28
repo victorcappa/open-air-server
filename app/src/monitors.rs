@@ -26,8 +26,12 @@ pub struct Monitor {
 }
 
 impl Monitor {
-    pub fn width(&self) -> i32 { self.rect.right - self.rect.left }
-    pub fn height(&self) -> i32 { self.rect.bottom - self.rect.top }
+    pub fn width(&self) -> i32 {
+        self.rect.right - self.rect.left
+    }
+    pub fn height(&self) -> i32 {
+        self.rect.bottom - self.rect.top
+    }
 }
 
 #[cfg(windows)]
@@ -39,10 +43,16 @@ mod sys {
         EnumDisplayMonitors, GetMonitorInfoW, HDC, HMONITOR, MONITORINFOEXW,
     };
 
-    struct EnumCtx { v: Vec<Monitor>, idx: u32 }
+    struct EnumCtx {
+        v: Vec<Monitor>,
+        idx: u32,
+    }
 
     unsafe extern "system" fn enum_cb(
-        hmon: HMONITOR, _hdc: HDC, _rect: *mut RECT, lparam: LPARAM,
+        hmon: HMONITOR,
+        _hdc: HDC,
+        _rect: *mut RECT,
+        lparam: LPARAM,
     ) -> BOOL {
         let ctx = &mut *(lparam.0 as *mut EnumCtx);
         let mut info = MONITORINFOEXW::default();
@@ -52,7 +62,12 @@ mod sys {
             ctx.v.push(Monitor {
                 index: ctx.idx,
                 primary: (info.monitorInfo.dwFlags & 1) != 0, // MONITORINFOF_PRIMARY = 1
-                rect: Rect { left: r.left, top: r.top, right: r.right, bottom: r.bottom },
+                rect: Rect {
+                    left: r.left,
+                    top: r.top,
+                    right: r.right,
+                    bottom: r.bottom,
+                },
             });
             ctx.idx += 1;
         }
@@ -60,10 +75,17 @@ mod sys {
     }
 
     pub fn list() -> Vec<Monitor> {
-        let mut ctx = EnumCtx { v: Vec::new(), idx: 0 };
+        let mut ctx = EnumCtx {
+            v: Vec::new(),
+            idx: 0,
+        };
         unsafe {
-            let _ = EnumDisplayMonitors(None, None, Some(enum_cb),
-                                        LPARAM(&mut ctx as *mut _ as isize));
+            let _ = EnumDisplayMonitors(
+                None,
+                None,
+                Some(enum_cb),
+                LPARAM(&mut ctx as *mut _ as isize),
+            );
         }
         ctx.v
     }
@@ -114,9 +136,7 @@ mod sys {
         // CoreGraphics reports the first 32 instead of making discovery fail.
         let mut ids = [0_u32; 32];
         let mut count = 0_u32;
-        let err = unsafe {
-            CGGetActiveDisplayList(ids.len() as u32, ids.as_mut_ptr(), &mut count)
-        };
+        let err = unsafe { CGGetActiveDisplayList(ids.len() as u32, ids.as_mut_ptr(), &mut count) };
         if err != 0 {
             return Vec::new();
         }
@@ -154,23 +174,31 @@ mod sys {
     use super::Monitor;
     /// X11 (RandR/Xinerama) + Wayland enumeration is still pending. Empty means
     /// the Settings display dropdown hides and the engine uses default placement.
-    pub fn list() -> Vec<Monitor> { Vec::new() }
+    pub fn list() -> Vec<Monitor> {
+        Vec::new()
+    }
 }
 
 /// Snapshot the currently connected monitors (empty on platforms without
 /// enumeration yet).
-pub fn list() -> Vec<Monitor> { sys::list() }
+pub fn list() -> Vec<Monitor> {
+    sys::list()
+}
 
 /// Resolve a `Config::preferred_monitor` value to an actual `Monitor`, or fall
 /// back to the primary (then the first), or `None` if none are enumerated.
 pub fn resolve(preferred: Option<u32>) -> Option<Monitor> {
     let mons = list();
-    if mons.is_empty() { return None; }
+    if mons.is_empty() {
+        return None;
+    }
     if let Some(i) = preferred {
         if let Some(m) = mons.iter().find(|m| m.index == i) {
             return Some(m.clone());
         }
     }
-    mons.iter().find(|m| m.primary).cloned()
+    mons.iter()
+        .find(|m| m.primary)
+        .cloned()
         .or_else(|| mons.into_iter().next())
 }

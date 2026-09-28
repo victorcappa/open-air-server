@@ -80,6 +80,20 @@ features = [
 # Single version across the tree (tao 0.34 already uses raw-window-handle 0.6.2).
 [target.'cfg(target_os = "macos")'.dependencies]
 raw-window-handle = "0.6"
+# Native waiting-state label inside the same NSView that later hosts the video.
+# Keep these aligned with tao 0.34's objc2 generation to avoid duplicate ABI
+# wrappers for AppKit objects.
+objc2 = { version = "0.6.4", default-features = false, features = ["std"] }
+objc2-app-kit = { version = "0.3.2", default-features = false, features = [
+    "std", "NSCell", "NSColor", "NSControl", "NSFont", "NSFontDescriptor",
+    "NSResponder", "NSText", "NSTextField", "NSView", "objc2-quartz-core",
+] }
+objc2-foundation = { version = "0.3.2", default-features = false, features = [
+    "std", "NSString",
+] }
+objc2-quartz-core = { version = "0.3.2", default-features = false, features = [
+    "std", "CALayer", "objc2-core-foundation",
+] }
 
 # Embeds icons/app.ico as the exe icon resource (id 1) — used by Explorer, the
 # taskbar, and our host window's WNDCLASS (see build.rs + engine.rs). Windows-only.

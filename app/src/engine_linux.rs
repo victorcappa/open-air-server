@@ -192,70 +192,70 @@ extern "C" fn engine_log_cb(_level: c_int, msg: *const c_char, _user: *mut c_voi
     // this is cheap insurance against future edits / debug builds where panics
     // unwind rather than abort).
     let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-    if msg.is_null() {
-        return;
-    }
-    // Drop callbacks from an engine that is no longer the active one (its log
-    // thread is still draining during stop/destroy). Without this, a stale
-    // "Begin streaming"/teardown/ROTATION line could flip the connection or
-    // resize statics that the next worker's X11 loop reads -> ghost map/resize.
-    if !ENGINE_ACTIVE.load(Ordering::SeqCst) {
-        return;
-    }
-    let text = unsafe { CStr::from_ptr(msg) }.to_string_lossy();
-    // The engine gave up during startup. Nothing else will ever tell us: the C ABI
-    // called this run a success the moment the worker spawned, so without this the
-    // X11 loop keeps running, the tray keeps showing "Ready", and the receiver is
-    // simply invisible to every device. Flag it and report Off; the tray consumes
-    // the flag, does the real teardown (it owns the Engine) and tells the user.
-    if crate::status::is_fatal_start_line(&text) {
-        crate::status::START_FAILED.store(true, Ordering::SeqCst);
-        send_status(Status::Off);
-        return;
-    }
-    // The pinned adapter was gone and the engine fell back to every interface. It
-    // KEEPS RUNNING, so this changes nothing but the tray's menu text — and the
-    // resend is what gets that menu rebuilt, since the tray only rebuilds on a
-    // status event and this line lands while the engine is still starting.
-    if crate::status::is_pin_ignored_line(&text) {
-        if !crate::status::PIN_IGNORED.swap(true, Ordering::SeqCst) {
-            send_status(Status::Ready);
+        if msg.is_null() {
+            return;
         }
-        return;
-    }
-    if text.contains(MARK_CONNECTED) {
-        if !CONNECTED.swap(true, Ordering::SeqCst) {
+        // Drop callbacks from an engine that is no longer the active one (its log
+        // thread is still draining during stop/destroy). Without this, a stale
+        // "Begin streaming"/teardown/ROTATION line could flip the connection or
+        // resize statics that the next worker's X11 loop reads -> ghost map/resize.
+        if !ENGINE_ACTIVE.load(Ordering::SeqCst) {
+            return;
+        }
+        let text = unsafe { CStr::from_ptr(msg) }.to_string_lossy();
+        // The engine gave up during startup. Nothing else will ever tell us: the C ABI
+        // called this run a success the moment the worker spawned, so without this the
+        // X11 loop keeps running, the tray keeps showing "Ready", and the receiver is
+        // simply invisible to every device. Flag it and report Off; the tray consumes
+        // the flag, does the real teardown (it owns the Engine) and tells the user.
+        if crate::status::is_fatal_start_line(&text) {
+            crate::status::START_FAILED.store(true, Ordering::SeqCst);
+            send_status(Status::Off);
+            return;
+        }
+        // The pinned adapter was gone and the engine fell back to every interface. It
+        // KEEPS RUNNING, so this changes nothing but the tray's menu text — and the
+        // resend is what gets that menu rebuilt, since the tray only rebuilds on a
+        // status event and this line lands while the engine is still starting.
+        if crate::status::is_pin_ignored_line(&text) {
+            if !crate::status::PIN_IGNORED.swap(true, Ordering::SeqCst) {
+                send_status(Status::Ready);
+            }
+            return;
+        }
+        if text.contains(MARK_CONNECTED) {
+            if !CONNECTED.swap(true, Ordering::SeqCst) {
+                CONN_GEN.fetch_add(1, Ordering::SeqCst);
+            }
+        } else if text.contains(MARK_TEARDOWN) && CONNECTED.swap(false, Ordering::SeqCst) {
             CONN_GEN.fetch_add(1, Ordering::SeqCst);
         }
-    } else if text.contains(MARK_TEARDOWN) && CONNECTED.swap(false, Ordering::SeqCst) {
-        CONN_GEN.fetch_add(1, Ordering::SeqCst);
-    }
-    // Video frame size -> fit the window to the content aspect (no black bars).
-    // Parse the *display* W,H from UxPlay's "ROTATION-PROBE dims: ... w=W h=H ..."
-    // line: it is LOGGER_INFO (so it reaches this callback WITHOUT -d), is
-    // codec-independent (raop_rtp_mirror, not the renderer), and re-fires on
-    // rotation. The alternatives don't work for us: "begin video stream wxh" is
-    // DEBUG-only, and "video format is ... video WxH" is h265-only (we run h264).
-    if text.contains("ROTATION-PROBE dims:") {
-        // The standalone " w=" / " h=" (NOT w0=/ws=/uw=/h0=/hs=) carry the final
-        // display size; take the digits right after each.
-        let num_after = |key: &str| -> Option<u32> {
-            text.split(key)
-                .nth(1)?
-                .split(|c: char| !c.is_ascii_digit())
-                .next()?
-                .parse::<u32>()
-                .ok()
-        };
-        if let (Some(w), Some(h)) = (num_after(" w="), num_after(" h=")) {
-            if w > 0 && h > 0 {
-                let packed = ((w as u64) << 32) | h as u64;
-                if VIDEO_WH.swap(packed, Ordering::SeqCst) != packed {
-                    RESIZE_GEN.fetch_add(1, Ordering::SeqCst);
+        // Video frame size -> fit the window to the content aspect (no black bars).
+        // Parse the *display* W,H from UxPlay's "ROTATION-PROBE dims: ... w=W h=H ..."
+        // line: it is LOGGER_INFO (so it reaches this callback WITHOUT -d), is
+        // codec-independent (raop_rtp_mirror, not the renderer), and re-fires on
+        // rotation. The alternatives don't work for us: "begin video stream wxh" is
+        // DEBUG-only, and "video format is ... video WxH" is h265-only (we run h264).
+        if text.contains("ROTATION-PROBE dims:") {
+            // The standalone " w=" / " h=" (NOT w0=/ws=/uw=/h0=/hs=) carry the final
+            // display size; take the digits right after each.
+            let num_after = |key: &str| -> Option<u32> {
+                text.split(key)
+                    .nth(1)?
+                    .split(|c: char| !c.is_ascii_digit())
+                    .next()?
+                    .parse::<u32>()
+                    .ok()
+            };
+            if let (Some(w), Some(h)) = (num_after(" w="), num_after(" h=")) {
+                if w > 0 && h > 0 {
+                    let packed = ((w as u64) << 32) | h as u64;
+                    if VIDEO_WH.swap(packed, Ordering::SeqCst) != packed {
+                        RESIZE_GEN.fetch_add(1, Ordering::SeqCst);
+                    }
                 }
             }
         }
-    }
     })); // end catch_unwind
 }
 
@@ -264,10 +264,12 @@ extern "C" fn engine_log_cb(_level: c_int, msg: *const c_char, _user: *mut c_voi
 /// then fills the fullscreen window and XVideo scales the frame to it. No-op without a
 /// conforming WM (the window just stays at its fitted size — graceful).
 unsafe fn request_fullscreen(display: *mut xlib::Display, window: xlib::Window, on: bool) {
-    let net_wm_state =
-        xlib::XInternAtom(display, b"_NET_WM_STATE\0".as_ptr() as *const c_char, 0);
-    let fullscreen =
-        xlib::XInternAtom(display, b"_NET_WM_STATE_FULLSCREEN\0".as_ptr() as *const c_char, 0);
+    let net_wm_state = xlib::XInternAtom(display, b"_NET_WM_STATE\0".as_ptr() as *const c_char, 0);
+    let fullscreen = xlib::XInternAtom(
+        display,
+        b"_NET_WM_STATE_FULLSCREEN\0".as_ptr() as *const c_char,
+        0,
+    );
     if net_wm_state == 0 || fullscreen == 0 {
         return;
     }
@@ -282,7 +284,9 @@ unsafe fn request_fullscreen(display: *mut xlib::Display, window: xlib::Window, 
     cm.data.set_long(3, 1); // source indication: normal application
     let mut ev = xlib::XEvent { client_message: cm };
     xlib::XSendEvent(
-        display, root, 0,
+        display,
+        root,
+        0,
         xlib::SubstructureRedirectMask | xlib::SubstructureNotifyMask,
         &mut ev,
     );
@@ -312,32 +316,58 @@ fn run_host_window(cfg: Config, running: Arc<AtomicBool>, stop_flag: Arc<AtomicB
         // Wayland sink is the eventual fix there.)
         let (mut xvo, mut xve, mut xver) = (0, 0, 0);
         let xv_available = xlib::XQueryExtension(
-            display, b"XVideo\0".as_ptr() as *const c_char, &mut xvo, &mut xve, &mut xver) != 0;
+            display,
+            b"XVideo\0".as_ptr() as *const c_char,
+            &mut xvo,
+            &mut xve,
+            &mut xver,
+        ) != 0;
         let dpi = {
             let rms = xlib::XResourceManagerString(display);
-            if rms.is_null() { String::new() } else {
-                CStr::from_ptr(rms).to_string_lossy()
-                    .lines().find(|l| l.starts_with("Xft.dpi"))
-                    .map(|l| l.trim().to_string()).unwrap_or_default()
+            if rms.is_null() {
+                String::new()
+            } else {
+                CStr::from_ptr(rms)
+                    .to_string_lossy()
+                    .lines()
+                    .find(|l| l.starts_with("Xft.dpi"))
+                    .map(|l| l.trim().to_string())
+                    .unwrap_or_default()
             }
         };
         // Pick the video sink from the REAL XVideo port count: xvimagesink (hardware
         // overlay, smooth 4K) needs one port per renderer, and the h265 path runs two
         // sinks (h264 + h265) at once. Fall back to software ximagesink — loudly — when
         // there genuinely aren't enough ports (e.g. WSLg's single-port emulated XVideo).
-        let xv_ports = if xv_available { xv_image_ports(display, window) } else { 0 };
+        let xv_ports = if xv_available {
+            xv_image_ports(display, window)
+        } else {
+            0
+        };
         let needed_ports = 1 + u32::from(cfg.enable_h265); // (+coverart, off on Linux)
         let use_xv = xv_available && xv_ports >= needed_ports;
         let video_sink: &str = if use_xv { "xvimagesink" } else { "ximagesink" };
         if xv_available && !use_xv {
-            eprintln!("[engine] XVideo: {} image port(s) available, need {} for the \
+            eprintln!(
+                "[engine] XVideo: {} image port(s) available, need {} for the \
                        h264+h265 renderers -> falling back to software ximagesink \
-                       (4K may stutter)", xv_ports, needed_ports);
+                       (4K may stutter)",
+                xv_ports, needed_ports
+            );
         }
-        eprintln!("[engine] X11 screen {}x{}, XVideo={} ({} ports, sink={}), {}",
-            xlib::XDisplayWidth(display, screen), xlib::XDisplayHeight(display, screen),
-            xv_available, xv_ports, video_sink,
-            if dpi.is_empty() { "Xft.dpi=unset".into() } else { dpi });
+        eprintln!(
+            "[engine] X11 screen {}x{}, XVideo={} ({} ports, sink={}), {}",
+            xlib::XDisplayWidth(display, screen),
+            xlib::XDisplayHeight(display, screen),
+            xv_available,
+            xv_ports,
+            video_sink,
+            if dpi.is_empty() {
+                "Xft.dpi=unset".into()
+            } else {
+                dpi
+            }
+        );
 
         let title = CString::new("Open Air Server").unwrap();
         xlib::XStoreName(display, window, title.as_ptr());
@@ -349,7 +379,11 @@ fn run_host_window(cfg: Config, running: Arc<AtomicBool>, stop_flag: Arc<AtomicB
         let mut wm_delete =
             xlib::XInternAtom(display, b"WM_DELETE_WINDOW\0".as_ptr() as *const c_char, 0);
         xlib::XSetWMProtocols(display, window, &mut wm_delete, 1);
-        xlib::XSelectInput(display, window, xlib::StructureNotifyMask | xlib::KeyPressMask);
+        xlib::XSelectInput(
+            display,
+            window,
+            xlib::StructureNotifyMask | xlib::KeyPressMask,
+        );
         // Created HIDDEN (not mapped): the engine just advertises; the window is
         // shown only when a device actually connects.
         xlib::XFlush(display);
@@ -401,8 +435,15 @@ fn run_host_window(cfg: Config, running: Arc<AtomicBool>, stop_flag: Arc<AtomicB
         // icon on "Off" (grey) until a device connects, because the only later
         // status events are Connected (on connect) / Ready (on disconnect) / Off
         // (on teardown) — the initial Ready transition was never sent.
-        send_status(if started.is_ok() { Status::Ready } else { Status::Off });
-        eprintln!("[engine] X11 host window 0x{xid:x} up; engine started: {}", started.is_ok());
+        send_status(if started.is_ok() {
+            Status::Ready
+        } else {
+            Status::Off
+        });
+        eprintln!(
+            "[engine] X11 host window 0x{xid:x} up; engine started: {}",
+            started.is_ok()
+        );
 
         // Poll loop: drain X events, map/unmap on connect/disconnect, exit on stop.
         let mut mapped = false;
@@ -431,7 +472,11 @@ fn run_host_window(cfg: Config, running: Arc<AtomicBool>, stop_flag: Arc<AtomicB
                     let keysym = xlib::XLookupKeysym(&mut ke, 0);
                     let alt = (ke.state & xlib::Mod1Mask) != 0;
                     if (keysym == XK_RETURN && alt) || (keysym == XK_ESCAPE && is_fullscreen) {
-                        is_fullscreen = if keysym == XK_ESCAPE { false } else { !is_fullscreen };
+                        is_fullscreen = if keysym == XK_ESCAPE {
+                            false
+                        } else {
+                            !is_fullscreen
+                        };
                         request_fullscreen(display, window, is_fullscreen);
                         if !is_fullscreen {
                             // Force the aspect-fit resize to re-run next iteration.
@@ -580,8 +625,8 @@ impl Engine {
 
     pub fn restart(&self, cfg: &Config) -> anyhow::Result<()> {
         self.stop(); // joins the worker, which already ran stop()+destroy()
-        // Margin for the OS to release the RAOP/AirPlay UDP ports + the mDNS
-        // registration that destroy() tore down, so the new start() can rebind.
+                     // Margin for the OS to release the RAOP/AirPlay UDP ports + the mDNS
+                     // registration that destroy() tore down, so the new start() can rebind.
         std::thread::sleep(Duration::from_millis(200));
         self.start(cfg)
     }

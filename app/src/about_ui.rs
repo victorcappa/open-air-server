@@ -5,11 +5,11 @@ use eframe::egui::{self, Color32, FontId, Margin, RichText, Rounding, Stroke, Ve
 use crate::config::APP_NAME;
 
 const ACCENT_BLUE: Color32 = Color32::from_rgb(0x0A, 0x84, 0xFF);
-const BG_DARK:     Color32 = Color32::from_rgb(0x18, 0x1A, 0x20);
-const BG_PANEL:    Color32 = Color32::from_rgb(0x22, 0x25, 0x2D);
-const BG_FIELD:    Color32 = Color32::from_rgb(0x2C, 0x30, 0x39);
-const TEXT_PRIM:   Color32 = Color32::from_rgb(0xF2, 0xF2, 0xF7);
-const TEXT_DIM:    Color32 = Color32::from_rgb(0x9A, 0x9F, 0xAA);
+const BG_DARK: Color32 = Color32::from_rgb(0x18, 0x1A, 0x20);
+const BG_PANEL: Color32 = Color32::from_rgb(0x22, 0x25, 0x2D);
+const BG_FIELD: Color32 = Color32::from_rgb(0x2C, 0x30, 0x39);
+const TEXT_PRIM: Color32 = Color32::from_rgb(0xF2, 0xF2, 0xF7);
+const TEXT_DIM: Color32 = Color32::from_rgb(0x9A, 0x9F, 0xAA);
 
 const APP_ICON_PNG: &[u8] = include_bytes!("../icons/app.ico");
 
@@ -18,7 +18,7 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 /// Returns true if we hold the single-instance lock and should proceed.
 #[cfg(windows)]
 fn acquire_single_instance(window_title: &str) -> bool {
-    use windows::core::{PCWSTR, w};
+    use windows::core::{w, PCWSTR};
     use windows::Win32::Foundation::{GetLastError, ERROR_ALREADY_EXISTS, HWND};
     use windows::Win32::System::Threading::CreateMutexW;
     use windows::Win32::UI::WindowsAndMessaging::{
@@ -27,8 +27,10 @@ fn acquire_single_instance(window_title: &str) -> bool {
     let h = unsafe { CreateMutexW(None, false, w!("OpenAirServer.About.SingleInstance")) };
     let already = unsafe { GetLastError() } == ERROR_ALREADY_EXISTS;
     if already {
-        let title: Vec<u16> = window_title.encode_utf16()
-            .chain(std::iter::once(0)).collect();
+        let title: Vec<u16> = window_title
+            .encode_utf16()
+            .chain(std::iter::once(0))
+            .collect();
         unsafe {
             if let Ok(hwnd) = FindWindowW(None, PCWSTR(title.as_ptr())) {
                 if hwnd != HWND::default() {
@@ -45,19 +47,27 @@ fn acquire_single_instance(window_title: &str) -> bool {
 }
 
 #[cfg(not(windows))]
-fn acquire_single_instance(_window_title: &str) -> bool { true }
+fn acquire_single_instance(_window_title: &str) -> bool {
+    true
+}
 
 pub fn run() -> Result<(), eframe::Error> {
     let lang = crate::i18n::Lang::from_config(&crate::config::Config::load().language);
     let t = crate::i18n::s(lang);
     let win_title = format!("{APP_NAME} — {}", t.about);
 
-    if !acquire_single_instance(&win_title) { return Ok(()); }
+    if !acquire_single_instance(&win_title) {
+        return Ok(());
+    }
 
     let icon_data = image::load_from_memory(APP_ICON_PNG).ok().map(|i| {
         let rgba = i.to_rgba8();
         let (w, h) = rgba.dimensions();
-        egui::IconData { rgba: rgba.into_raw(), width: w, height: h }
+        egui::IconData {
+            rgba: rgba.into_raw(),
+            width: w,
+            height: h,
+        }
     });
 
     let win_w = 540.0_f32;
@@ -67,8 +77,10 @@ pub fn run() -> Result<(), eframe::Error> {
         use windows::Win32::UI::WindowsAndMessaging::{GetSystemMetrics, SM_CXSCREEN, SM_CYSCREEN};
         let sw = GetSystemMetrics(SM_CXSCREEN) as f32;
         let sh = GetSystemMetrics(SM_CYSCREEN) as f32;
-        Some(egui::Pos2::new(((sw - win_w) * 0.5).max(0.0),
-                             ((sh - win_h) * 0.5).max(0.0)))
+        Some(egui::Pos2::new(
+            ((sw - win_w) * 0.5).max(0.0),
+            ((sh - win_h) * 0.5).max(0.0),
+        ))
     };
     #[cfg(not(windows))]
     let pos: Option<egui::Pos2> = None;
@@ -121,9 +133,11 @@ fn apply_theme(ctx: &egui::Context) {
 
     let mut style = (*ctx.style()).clone();
     use egui::TextStyle::*;
-    style.text_styles.insert(Body,      FontId::proportional(14.0));
-    style.text_styles.insert(Button,    FontId::proportional(14.0));
-    style.text_styles.insert(Heading,   FontId::proportional(22.0));
+    style.text_styles.insert(Body, FontId::proportional(14.0));
+    style.text_styles.insert(Button, FontId::proportional(14.0));
+    style
+        .text_styles
+        .insert(Heading, FontId::proportional(22.0));
     style.text_styles.insert(Monospace, FontId::monospace(13.0));
     style.spacing.item_spacing = Vec2::new(10.0, 8.0);
     style.spacing.button_padding = Vec2::new(14.0, 6.0);
@@ -139,13 +153,20 @@ impl eframe::App for AboutApp {
     fn update(&mut self, ctx: &egui::Context, _: &mut eframe::Frame) {
         let t = crate::i18n::s(self.lang);
         egui::TopBottomPanel::bottom("bottom_bar")
-            .frame(egui::Frame::default().fill(BG_PANEL)
-                   .inner_margin(Margin::symmetric(18.0, 12.0)))
+            .frame(
+                egui::Frame::default()
+                    .fill(BG_PANEL)
+                    .inner_margin(Margin::symmetric(18.0, 12.0)),
+            )
             .show(ctx, |ui| {
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     let btn = egui::Button::new(
-                        RichText::new(t.close).size(14.0).color(Color32::WHITE).strong())
-                        .fill(ACCENT_BLUE);
+                        RichText::new(t.close)
+                            .size(14.0)
+                            .color(Color32::WHITE)
+                            .strong(),
+                    )
+                    .fill(ACCENT_BLUE);
                     if ui.add_sized([100.0, 30.0], btn).clicked() {
                         ctx.send_viewport_cmd(egui::ViewportCommand::Close);
                     }
@@ -226,8 +247,12 @@ impl eframe::App for AboutApp {
 fn section(ui: &mut egui::Ui, title: &str, add: impl FnOnce(&mut egui::Ui)) {
     ui.horizontal(|ui| {
         ui.add_space(20.0);
-        ui.label(RichText::new(title.to_uppercase())
-                 .color(TEXT_DIM).size(11.0).strong());
+        ui.label(
+            RichText::new(title.to_uppercase())
+                .color(TEXT_DIM)
+                .size(11.0)
+                .strong(),
+        );
     });
     ui.add_space(4.0);
     let full = ui.available_width();
@@ -252,7 +277,10 @@ fn para(ui: &mut egui::Ui, text: &str) {
 /// Two-column row with a clickable hyperlink as the first line and a dim
 /// help line underneath.
 fn link_row(ui: &mut egui::Ui, label: &str, help: &str, url: &str) {
-    ui.hyperlink_to(RichText::new(label).color(ACCENT_BLUE).size(14.0).strong(), url);
+    ui.hyperlink_to(
+        RichText::new(label).color(ACCENT_BLUE).size(14.0).strong(),
+        url,
+    );
     if !help.is_empty() {
         ui.label(RichText::new(help).color(TEXT_DIM).size(11.0));
     }

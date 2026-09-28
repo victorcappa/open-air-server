@@ -8,12 +8,12 @@ use eframe::egui::{self, Color32, FontId, Margin, RichText, Rounding, Stroke, Ve
 use crate::config::{Config, APP_NAME};
 
 const ACCENT_BLUE: Color32 = Color32::from_rgb(0x0A, 0x84, 0xFF);
-const BG_DARK:     Color32 = Color32::from_rgb(0x18, 0x1A, 0x20);
-const BG_PANEL:    Color32 = Color32::from_rgb(0x22, 0x25, 0x2D);
-const BG_FIELD:    Color32 = Color32::from_rgb(0x2C, 0x30, 0x39);
-const TEXT_PRIM:   Color32 = Color32::from_rgb(0xF2, 0xF2, 0xF7);
-const TEXT_DIM:    Color32 = Color32::from_rgb(0x9A, 0x9F, 0xAA);
-const RED_DANGER:  Color32 = Color32::from_rgb(0xFF, 0x45, 0x3A);
+const BG_DARK: Color32 = Color32::from_rgb(0x18, 0x1A, 0x20);
+const BG_PANEL: Color32 = Color32::from_rgb(0x22, 0x25, 0x2D);
+const BG_FIELD: Color32 = Color32::from_rgb(0x2C, 0x30, 0x39);
+const TEXT_PRIM: Color32 = Color32::from_rgb(0xF2, 0xF2, 0xF7);
+const TEXT_DIM: Color32 = Color32::from_rgb(0x9A, 0x9F, 0xAA);
+const RED_DANGER: Color32 = Color32::from_rgb(0xFF, 0x45, 0x3A);
 
 const APP_ICON_PNG: &[u8] = include_bytes!("../icons/app.ico");
 
@@ -22,12 +22,11 @@ const APP_ICON_PNG: &[u8] = include_bytes!("../icons/app.ico");
 /// already running (in which case we tried to raise its window).
 #[cfg(windows)]
 fn acquire_single_instance(window_title: &str) -> bool {
-    use windows::core::{PCWSTR, w};
+    use windows::core::{w, PCWSTR};
     use windows::Win32::Foundation::{GetLastError, ERROR_ALREADY_EXISTS, HWND};
     use windows::Win32::System::Threading::CreateMutexW;
     use windows::Win32::UI::WindowsAndMessaging::{
-        BringWindowToTop, FindWindowW, SetForegroundWindow, ShowWindow,
-        SW_RESTORE,
+        BringWindowToTop, FindWindowW, SetForegroundWindow, ShowWindow, SW_RESTORE,
     };
     // CreateMutexW returns a handle even if the mutex already existed; the
     // ERROR_ALREADY_EXISTS code tells us which.  We intentionally leak the
@@ -37,8 +36,10 @@ fn acquire_single_instance(window_title: &str) -> bool {
     let already = unsafe { GetLastError() } == ERROR_ALREADY_EXISTS;
     if already {
         // Try to raise the existing settings window by its (localized) title.
-        let title: Vec<u16> = window_title.encode_utf16()
-            .chain(std::iter::once(0)).collect();
+        let title: Vec<u16> = window_title
+            .encode_utf16()
+            .chain(std::iter::once(0))
+            .collect();
         unsafe {
             if let Ok(hwnd) = FindWindowW(None, PCWSTR(title.as_ptr())) {
                 if hwnd != HWND::default() {
@@ -58,7 +59,9 @@ fn acquire_single_instance(window_title: &str) -> bool {
 // Non-Windows: no named-mutex single-instance yet (TODO: flock on
 // $XDG_RUNTIME_DIR). eframe just opens a new Settings window if one is already up.
 #[cfg(not(windows))]
-fn acquire_single_instance(_window_title: &str) -> bool { true }
+fn acquire_single_instance(_window_title: &str) -> bool {
+    true
+}
 
 pub fn run(initial: Config) -> Result<(), eframe::Error> {
     // Localized window title (suffix follows the configured UI language).
@@ -72,13 +75,15 @@ pub fn run(initial: Config) -> Result<(), eframe::Error> {
     }
 
     // Load the .ico for the window title-bar icon.
-    let icon_data = image::load_from_memory(APP_ICON_PNG)
-        .ok()
-        .map(|i| {
-            let rgba = i.to_rgba8();
-            let (w, h) = rgba.dimensions();
-            egui::IconData { rgba: rgba.into_raw(), width: w, height: h }
-        });
+    let icon_data = image::load_from_memory(APP_ICON_PNG).ok().map(|i| {
+        let rgba = i.to_rgba8();
+        let (w, h) = rgba.dimensions();
+        egui::IconData {
+            rgba: rgba.into_raw(),
+            width: w,
+            height: h,
+        }
+    });
 
     // Center the window on the primary monitor (Windows). Elsewhere we let the
     // window manager place it (eframe/winit default).
@@ -89,8 +94,10 @@ pub fn run(initial: Config) -> Result<(), eframe::Error> {
         use windows::Win32::UI::WindowsAndMessaging::{GetSystemMetrics, SM_CXSCREEN, SM_CYSCREEN};
         let sw = GetSystemMetrics(SM_CXSCREEN) as f32;
         let sh = GetSystemMetrics(SM_CYSCREEN) as f32;
-        Some(egui::Pos2::new(((sw - win_w) * 0.5).max(0.0),
-                             ((sh - win_h) * 0.5).max(0.0)))
+        Some(egui::Pos2::new(
+            ((sw - win_w) * 0.5).max(0.0),
+            ((sh - win_h) * 0.5).max(0.0),
+        ))
     };
     #[cfg(not(windows))]
     let pos: Option<egui::Pos2> = None;
@@ -144,9 +151,11 @@ fn apply_theme(ctx: &egui::Context) {
     // Slightly bigger fonts than egui default for an Apple-y feel.
     let mut style = (*ctx.style()).clone();
     use egui::TextStyle::*;
-    style.text_styles.insert(Body,     FontId::proportional(14.0));
-    style.text_styles.insert(Button,   FontId::proportional(14.0));
-    style.text_styles.insert(Heading,  FontId::proportional(20.0));
+    style.text_styles.insert(Body, FontId::proportional(14.0));
+    style.text_styles.insert(Button, FontId::proportional(14.0));
+    style
+        .text_styles
+        .insert(Heading, FontId::proportional(20.0));
     style.text_styles.insert(Monospace, FontId::monospace(13.0));
     style.spacing.item_spacing = Vec2::new(10.0, 8.0);
     style.spacing.button_padding = Vec2::new(14.0, 6.0);
@@ -156,18 +165,24 @@ fn apply_theme(ctx: &egui::Context) {
 
 struct SettingsApp {
     original: Config,
-    edited:   Config,
-    save_ok_flash:  f32, // small post-save confirmation alpha
+    edited: Config,
+    save_ok_flash: f32,   // small post-save confirmation alpha
     copy_hint_flash: f32, // "path copied to clipboard" toast
 }
 
 impl SettingsApp {
     fn new(initial: Config) -> Self {
-        Self { original: initial.clone(), edited: initial,
-               save_ok_flash: 0.0, copy_hint_flash: 0.0 }
+        Self {
+            original: initial.clone(),
+            edited: initial,
+            save_ok_flash: 0.0,
+            copy_hint_flash: 0.0,
+        }
     }
 
-    fn dirty(&self) -> bool { self.original != self.edited }
+    fn dirty(&self) -> bool {
+        self.original != self.edited
+    }
 
     fn save(&mut self) -> anyhow::Result<()> {
         self.edited.save()?;
@@ -187,24 +202,28 @@ impl eframe::App for SettingsApp {
             ctx.request_repaint();
         }
         if self.copy_hint_flash > 0.0 {
-            self.copy_hint_flash = (self.copy_hint_flash - ctx.input(|i| i.unstable_dt) * 0.7).max(0.0);
+            self.copy_hint_flash =
+                (self.copy_hint_flash - ctx.input(|i| i.unstable_dt) * 0.7).max(0.0);
             ctx.request_repaint();
         }
 
         // Bottom action bar (Cancel / Save) — fixed at bottom regardless of scroll.
         egui::TopBottomPanel::bottom("bottom_bar")
-            .frame(egui::Frame::default()
-                .fill(BG_PANEL)
-                .inner_margin(Margin::symmetric(18.0, 12.0)))
+            .frame(
+                egui::Frame::default()
+                    .fill(BG_PANEL)
+                    .inner_margin(Margin::symmetric(18.0, 12.0)),
+            )
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
                     // Compact "Config file" hint: hover for full path, click to copy.
                     let cfg_path = crate::config::config_path();
-                    let cfg_str  = cfg_path.display().to_string();
+                    let cfg_str = cfg_path.display().to_string();
                     let label = RichText::new("📄 Config file")
-                        .color(ACCENT_BLUE).size(12.0).underline();
-                    let resp = ui.add(egui::Label::new(label)
-                                       .sense(egui::Sense::click()));
+                        .color(ACCENT_BLUE)
+                        .size(12.0)
+                        .underline();
+                    let resp = ui.add(egui::Label::new(label).sense(egui::Sense::click()));
                     let resp = resp.on_hover_text(&cfg_str);
                     if resp.clicked() {
                         ctx.copy_text(cfg_str.clone());
@@ -216,8 +235,12 @@ impl eframe::App for SettingsApp {
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         let save_color = if self.dirty() { ACCENT_BLUE } else { BG_FIELD };
                         let save = egui::Button::new(
-                            RichText::new(t.save).size(14.0).color(Color32::WHITE).strong())
-                            .fill(save_color);
+                            RichText::new(t.save)
+                                .size(14.0)
+                                .color(Color32::WHITE)
+                                .strong(),
+                        )
+                        .fill(save_color);
                         let save_resp = ui.add_sized([100.0, 30.0], save);
                         if save_resp.clicked() && self.dirty() {
                             if let Err(e) = self.save() {
@@ -225,8 +248,8 @@ impl eframe::App for SettingsApp {
                             }
                         }
                         ui.add_space(8.0);
-                        let cancel = egui::Button::new(RichText::new(t.cancel).size(14.0))
-                            .fill(BG_FIELD);
+                        let cancel =
+                            egui::Button::new(RichText::new(t.cancel).size(14.0)).fill(BG_FIELD);
                         if ui.add_sized([90.0, 30.0], cancel).clicked() {
                             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
                         }
@@ -502,13 +525,21 @@ impl eframe::App for SettingsApp {
 }
 
 impl SettingsApp {
-    fn section(&mut self, ui: &mut egui::Ui, title: &str,
-               add: impl FnOnce(&mut egui::Ui, &mut Config)) {
+    fn section(
+        &mut self,
+        ui: &mut egui::Ui,
+        title: &str,
+        add: impl FnOnce(&mut egui::Ui, &mut Config),
+    ) {
         // Section title above the panel.
         ui.horizontal(|ui| {
             ui.add_space(20.0);
-            ui.label(RichText::new(title.to_uppercase())
-                     .color(TEXT_DIM).size(11.0).strong());
+            ui.label(
+                RichText::new(title.to_uppercase())
+                    .color(TEXT_DIM)
+                    .size(11.0)
+                    .strong(),
+            );
         });
         ui.add_space(4.0);
         // Panel — outer margin gives the left+right indent, inner margin gives
@@ -530,8 +561,7 @@ impl SettingsApp {
 
 /// Two-line row: a label on the left + a right-aligned control + a dim help
 /// line spanning the full width underneath.
-fn labelled_row(ui: &mut egui::Ui, label: &str, help: &str,
-                add: impl FnOnce(&mut egui::Ui)) {
+fn labelled_row(ui: &mut egui::Ui, label: &str, help: &str, add: impl FnOnce(&mut egui::Ui)) {
     ui.horizontal(|ui| {
         ui.label(RichText::new(label).color(TEXT_PRIM).strong());
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {

@@ -43,16 +43,16 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
 use windows::Win32::UI::WindowsAndMessaging::{
     BringWindowToTop, CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW,
     GetClientRect, GetForegroundWindow, GetMessageW, GetWindowLongPtrW, GetWindowRect,
-    GetWindowThreadProcessId, IsWindowVisible, KillTimer, LoadCursorW, LoadIconW, PostMessageW, PostQuitMessage,
-    RegisterClassW, SendMessageW, SetCursor, SetForegroundWindow, SetTimer, HTBOTTOM, HTBOTTOMLEFT,
-    HTBOTTOMRIGHT, HTCAPTION, HTLEFT, HTRIGHT, HTTOP, HTTOPLEFT, HTTOPRIGHT, IDC_SIZENESW,
-    IDC_SIZENS, IDC_SIZENWSE, IDC_SIZEWE, WM_KEYDOWN, WM_LBUTTONDOWN, WM_MOUSEMOVE, WM_NCCALCSIZE,
-    WM_NCLBUTTONDOWN, WM_SIZING, WMSZ_BOTTOM, WMSZ_BOTTOMLEFT, WMSZ_BOTTOMRIGHT, WMSZ_LEFT,
-    WMSZ_RIGHT, WMSZ_TOP, WMSZ_TOPLEFT, WMSZ_TOPRIGHT,
+    GetWindowThreadProcessId, IsWindowVisible, KillTimer, LoadCursorW, LoadIconW, PostMessageW,
+    PostQuitMessage, RegisterClassW, SendMessageW, SetCursor, SetForegroundWindow, SetTimer,
     SetWindowLongPtrW, SetWindowPos, ShowWindow, TranslateMessage, CS_HREDRAW, CS_VREDRAW,
-    CW_USEDEFAULT, GWLP_USERDATA, GWL_STYLE, HWND_NOTOPMOST, HWND_TOPMOST, HWND_TOP, IDC_ARROW, MSG,
-    SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOOWNERZORDER, SWP_NOSIZE, SWP_NOZORDER,
-    SW_HIDE, SW_SHOW, WINDOW_EX_STYLE, WM_APP, WM_CLOSE, WM_SYSKEYDOWN, WM_TIMER, WNDCLASSW,
+    CW_USEDEFAULT, GWLP_USERDATA, GWL_STYLE, HTBOTTOM, HTBOTTOMLEFT, HTBOTTOMRIGHT, HTCAPTION,
+    HTLEFT, HTRIGHT, HTTOP, HTTOPLEFT, HTTOPRIGHT, HWND_NOTOPMOST, HWND_TOP, HWND_TOPMOST,
+    IDC_ARROW, IDC_SIZENESW, IDC_SIZENS, IDC_SIZENWSE, IDC_SIZEWE, MSG, SWP_FRAMECHANGED,
+    SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOOWNERZORDER, SWP_NOSIZE, SWP_NOZORDER, SW_HIDE, SW_SHOW,
+    WINDOW_EX_STYLE, WMSZ_BOTTOM, WMSZ_BOTTOMLEFT, WMSZ_BOTTOMRIGHT, WMSZ_LEFT, WMSZ_RIGHT,
+    WMSZ_TOP, WMSZ_TOPLEFT, WMSZ_TOPRIGHT, WM_APP, WM_CLOSE, WM_KEYDOWN, WM_LBUTTONDOWN,
+    WM_MOUSEMOVE, WM_NCCALCSIZE, WM_NCLBUTTONDOWN, WM_SIZING, WM_SYSKEYDOWN, WM_TIMER, WNDCLASSW,
     WS_OVERLAPPEDWINDOW, WS_VISIBLE,
 };
 
@@ -132,53 +132,59 @@ extern "C" fn engine_log_cb(_level: c_int, msg: *const c_char, _user: *mut c_voi
     // the FFI boundary into C (UB). Contain it (the body is panic-free today; cheap
     // insurance for future edits / debug builds where panics unwind, not abort).
     let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-    if msg.is_null() {
-        return;
-    }
-    let text = unsafe { CStr::from_ptr(msg) }.to_string_lossy();
-    let hwnd_raw = CB_HWND.load(Ordering::SeqCst);
-    if hwnd_raw == 0 {
-        return;
-    }
-    let hwnd = HWND(hwnd_raw as *mut c_void);
-    // The engine gave up during startup. Nothing else will ever tell us: the C ABI
-    // called this run a success the moment the worker spawned, so without this the
-    // pump keeps running, the tray keeps showing "Ready", and the receiver is
-    // simply invisible to every device. Flag it and report Off; the tray consumes
-    // the flag, does the real teardown (it owns the Engine) and tells the user.
-    if crate::status::is_fatal_start_line(&text) {
-        crate::status::START_FAILED.store(true, Ordering::SeqCst);
-        send_status(Status::Off);
-        return;
-    }
-    // The pinned adapter was gone and the engine fell back to every interface. It
-    // KEEPS RUNNING, so this changes nothing but the tray's menu text — and the
-    // resend is what gets that menu rebuilt, since the tray only rebuilds on a
-    // status event and this line lands while the engine is still starting.
-    if crate::status::is_pin_ignored_line(&text) {
-        if !crate::status::PIN_IGNORED.swap(true, Ordering::SeqCst) {
-            send_status(Status::Ready);
+        if msg.is_null() {
+            return;
         }
-        return;
-    }
-    if text.contains(MARK_CONNECTED) {
-        if !CONNECTED.swap(true, Ordering::SeqCst) {
-            unsafe { let _ = PostMessageW(Some(hwnd), WM_APP_CONNECTED, WPARAM(0), LPARAM(0)); }
+        let text = unsafe { CStr::from_ptr(msg) }.to_string_lossy();
+        let hwnd_raw = CB_HWND.load(Ordering::SeqCst);
+        if hwnd_raw == 0 {
+            return;
         }
-    } else if text.contains(MARK_TEARDOWN) && CONNECTED.swap(false, Ordering::SeqCst) {
-        unsafe { let _ = PostMessageW(Some(hwnd), WM_APP_DISCONNECTED, WPARAM(0), LPARAM(0)); }
-    }
-    // Video frame size -> fit the window to the content aspect (no black bars).
-    // UxPlay logs "begin video stream wxh = WxH; ..." at every stream start
-    // (the "video_renderer_size:" line only fires on rotation).
-    if let Some(rest) = text.split("video stream wxh = ").nth(1) {
-        if let Some((w, h)) = parse_wxh(rest) {
-            let packed = ((w as u64) << 32) | h as u64;
-            if ASPECT_WH.swap(packed, Ordering::SeqCst) != packed {
-                unsafe { let _ = PostMessageW(Some(hwnd), WM_APP_RESIZE, WPARAM(0), LPARAM(0)); }
+        let hwnd = HWND(hwnd_raw as *mut c_void);
+        // The engine gave up during startup. Nothing else will ever tell us: the C ABI
+        // called this run a success the moment the worker spawned, so without this the
+        // pump keeps running, the tray keeps showing "Ready", and the receiver is
+        // simply invisible to every device. Flag it and report Off; the tray consumes
+        // the flag, does the real teardown (it owns the Engine) and tells the user.
+        if crate::status::is_fatal_start_line(&text) {
+            crate::status::START_FAILED.store(true, Ordering::SeqCst);
+            send_status(Status::Off);
+            return;
+        }
+        // The pinned adapter was gone and the engine fell back to every interface. It
+        // KEEPS RUNNING, so this changes nothing but the tray's menu text — and the
+        // resend is what gets that menu rebuilt, since the tray only rebuilds on a
+        // status event and this line lands while the engine is still starting.
+        if crate::status::is_pin_ignored_line(&text) {
+            if !crate::status::PIN_IGNORED.swap(true, Ordering::SeqCst) {
+                send_status(Status::Ready);
+            }
+            return;
+        }
+        if text.contains(MARK_CONNECTED) {
+            if !CONNECTED.swap(true, Ordering::SeqCst) {
+                unsafe {
+                    let _ = PostMessageW(Some(hwnd), WM_APP_CONNECTED, WPARAM(0), LPARAM(0));
+                }
+            }
+        } else if text.contains(MARK_TEARDOWN) && CONNECTED.swap(false, Ordering::SeqCst) {
+            unsafe {
+                let _ = PostMessageW(Some(hwnd), WM_APP_DISCONNECTED, WPARAM(0), LPARAM(0));
             }
         }
-    }
+        // Video frame size -> fit the window to the content aspect (no black bars).
+        // UxPlay logs "begin video stream wxh = WxH; ..." at every stream start
+        // (the "video_renderer_size:" line only fires on rotation).
+        if let Some(rest) = text.split("video stream wxh = ").nth(1) {
+            if let Some((w, h)) = parse_wxh(rest) {
+                let packed = ((w as u64) << 32) | h as u64;
+                if ASPECT_WH.swap(packed, Ordering::SeqCst) != packed {
+                    unsafe {
+                        let _ = PostMessageW(Some(hwnd), WM_APP_RESIZE, WPARAM(0), LPARAM(0));
+                    }
+                }
+            }
+        }
     })); // end catch_unwind
 }
 
@@ -208,7 +214,11 @@ fn build_options(cfg: &Config) -> String {
     if cfg.debug_logging {
         a.push("-d".into());
     }
-    a.extend(["-nh", "-nohold", "-nc", "-hls"].iter().map(|s| s.to_string()));
+    a.extend(
+        ["-nh", "-nohold", "-nc", "-hls"]
+            .iter()
+            .map(|s| s.to_string()),
+    );
     a.extend(["-fps".into(), cfg.target_fps.to_string()]);
     a.extend(["-vsync".into(), "no".into()]);
     if cfg.enable_h265 {
@@ -254,11 +264,11 @@ fn build_options(cfg: &Config) -> String {
 /// fullscreen. (B5.1: fullscreen only; B5.2 adds borderless/aspect fields.)
 struct WinState {
     is_fullscreen: bool,
-    want_fullscreen: bool,   // from cfg; applied when the window is shown on connect
-    borderless: bool,        // from cfg; strip the frame/title bar in windowed mode
-    saved_style: isize,      // GWL_STYLE before going fullscreen
-    saved_rect: RECT,        // window rect before going fullscreen
-    last_lbtn_down_ms: u32,  // GetTickCount of the last LMB-down (dbl-click synth)
+    want_fullscreen: bool, // from cfg; applied when the window is shown on connect
+    borderless: bool,      // from cfg; strip the frame/title bar in windowed mode
+    saved_style: isize,    // GWL_STYLE before going fullscreen
+    saved_rect: RECT,      // window rect before going fullscreen
+    last_lbtn_down_ms: u32, // GetTickCount of the last LMB-down (dbl-click synth)
 }
 
 /// Own fullscreen toggle (Raymond Chen recipe). The sink is launched with
@@ -282,11 +292,17 @@ fn toggle_fullscreen(hwnd: HWND, st: &mut WinState) {
                 return;
             }
             // Strip the frame (keep visible) and cover the monitor.
-            let fs_style = (st.saved_style & !(WS_OVERLAPPEDWINDOW.0 as isize)) | (WS_VISIBLE.0 as isize);
+            let fs_style =
+                (st.saved_style & !(WS_OVERLAPPEDWINDOW.0 as isize)) | (WS_VISIBLE.0 as isize);
             SetWindowLongPtrW(hwnd, GWL_STYLE, fs_style);
             let r = mi.rcMonitor;
             let _ = SetWindowPos(
-                hwnd, Some(HWND_TOP), r.left, r.top, r.right - r.left, r.bottom - r.top,
+                hwnd,
+                Some(HWND_TOP),
+                r.left,
+                r.top,
+                r.right - r.left,
+                r.bottom - r.top,
                 SWP_FRAMECHANGED | SWP_NOOWNERZORDER,
             );
             st.is_fullscreen = true;
@@ -294,7 +310,12 @@ fn toggle_fullscreen(hwnd: HWND, st: &mut WinState) {
             SetWindowLongPtrW(hwnd, GWL_STYLE, st.saved_style);
             let r = st.saved_rect;
             let _ = SetWindowPos(
-                hwnd, None, r.left, r.top, r.right - r.left, r.bottom - r.top,
+                hwnd,
+                None,
+                r.left,
+                r.top,
+                r.right - r.left,
+                r.bottom - r.top,
                 SWP_FRAMECHANGED | SWP_NOOWNERZORDER | SWP_NOZORDER,
             );
             st.is_fullscreen = false;
@@ -333,7 +354,12 @@ extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM)
                     let _ = GetClientRect(hwnd, &mut cr);
                     let ht = hit_edge(x, y, cr.right, cr.bottom);
                     let _ = ReleaseCapture();
-                    let _ = SendMessageW(hwnd, WM_NCLBUTTONDOWN, Some(WPARAM(ht as usize)), Some(LPARAM(0)));
+                    let _ = SendMessageW(
+                        hwnd,
+                        WM_NCLBUTTONDOWN,
+                        Some(WPARAM(ht as usize)),
+                        Some(LPARAM(0)),
+                    );
                 }
             }
             LRESULT(0)
@@ -456,15 +482,25 @@ fn parse_wxh(s: &str) -> Option<(u32, u32)> {
 fn hit_edge(x: i32, y: i32, w: i32, h: i32) -> u32 {
     let b = RESIZE_BORDER;
     let (l, r, t, bot) = (x < b, x >= w - b, y < b, y >= h - b);
-    if t && l { HTTOPLEFT }
-    else if t && r { HTTOPRIGHT }
-    else if bot && l { HTBOTTOMLEFT }
-    else if bot && r { HTBOTTOMRIGHT }
-    else if l { HTLEFT }
-    else if r { HTRIGHT }
-    else if t { HTTOP }
-    else if bot { HTBOTTOM }
-    else { HTCAPTION }
+    if t && l {
+        HTTOPLEFT
+    } else if t && r {
+        HTTOPRIGHT
+    } else if bot && l {
+        HTBOTTOMLEFT
+    } else if bot && r {
+        HTBOTTOMRIGHT
+    } else if l {
+        HTLEFT
+    } else if r {
+        HTRIGHT
+    } else if t {
+        HTTOP
+    } else if bot {
+        HTBOTTOM
+    } else {
+        HTCAPTION
+    }
 }
 
 /// Resize the (windowed) window so it matches the current video aspect — no
@@ -622,8 +658,15 @@ fn run_host_window(
         // Apply the borderless frame decision now (the WM_NCCALCSIZE handler
         // reads WinState.borderless; SWP_FRAMECHANGED forces a frame recalc).
         if cfg.borderless {
-            let _ = SetWindowPos(hwnd, None, 0, 0, 0, 0,
-                                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+            let _ = SetWindowPos(
+                hwnd,
+                None,
+                0,
+                0,
+                0,
+                0,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED,
+            );
         }
         // Alt+Enter is NOT a global hotkey: RegisterHotKey grabs it system-wide
         // for the whole time the engine runs (even with no video window shown),
@@ -670,8 +713,16 @@ fn run_host_window(
         // the tray. Without this, an autostarted engine leaves the icon on "Off"
         // until a device connects (the only later events are Connected/Ready-on-
         // disconnect/Off-on-teardown).
-        send_status(if started.is_ok() { Status::Ready } else { Status::Off });
-        eprintln!("[engine] host window {:?} up; engine started: {}", hwnd.0, started.is_ok());
+        send_status(if started.is_ok() {
+            Status::Ready
+        } else {
+            Status::Off
+        });
+        eprintln!(
+            "[engine] host window {:?} up; engine started: {}",
+            hwnd.0,
+            started.is_ok()
+        );
 
         // Win32 message pump — runs until WM_CLOSE -> PostQuitMessage.
         let mut msg = MSG::default();
@@ -835,12 +886,7 @@ impl Engine {
         let h = self.hwnd.load(Ordering::SeqCst);
         if h != 0 {
             unsafe {
-                let _ = PostMessageW(
-                    Some(HWND(h as *mut c_void)),
-                    WM_CLOSE,
-                    WPARAM(0),
-                    LPARAM(0),
-                );
+                let _ = PostMessageW(Some(HWND(h as *mut c_void)), WM_CLOSE, WPARAM(0), LPARAM(0));
             }
         }
         if let Some(t) = self.thread.lock().unwrap().take() {

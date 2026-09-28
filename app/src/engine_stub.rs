@@ -38,7 +38,9 @@ pub struct Engine {
 
 impl Engine {
     pub fn new() -> Self {
-        Self { running: AtomicBool::new(false) }
+        Self {
+            running: AtomicBool::new(false),
+        }
     }
 
     pub fn is_running(&self) -> bool {

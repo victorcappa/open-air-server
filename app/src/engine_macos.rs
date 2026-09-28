@@ -6,14 +6,15 @@
 //! the main thread, and `tao` (not `gst_macos_main`) owns it (validated by the M3
 //! gate). So this engine:
 //!   * is `attach_window()`-ed once from `StartCause::Init` (loop running), which
-//!     creates a hidden mirror window and extracts its `NSView*`;
+//!     creates the mirror window, adds a native waiting-state label and extracts
+//!     its `NSView*`;
 //!   * loads `uxplay-core.dylib` and drives it on its own worker thread
 //!     (`airplay_core_start`); the worker's overlay bind marshals onto the main
 //!     queue (video_renderer.c), which is why the engine is only ever started
 //!     AFTER the loop is up;
 //!   * reports device connect/disconnect via UxPlay log markers over the existing
-//!     `Status` channel (`install_status_sender`), and `main.rs` shows/hides +
-//!     aspect-fits the window from the main thread in response.
+//!     `Status` channel (`install_status_sender`), and `main.rs` swaps the same
+//!     window between waiting/video states + aspect-fits it on the main thread.
 //!
 //! Single-threaded by design: `Engine` is only ever touched from the main
 //! (event-loop) thread, so it uses `RefCell` and is intentionally `!Send`.
@@ -27,6 +28,12 @@ use std::sync::mpsc::Sender;
 use std::sync::Mutex;
 
 use airplay_lib::AirPlay;
+use objc2::rc::Retained;
+use objc2::MainThreadMarker;
+use objc2_app_kit::{
+    NSAutoresizingMaskOptions, NSColor, NSFont, NSTextAlignment, NSTextField, NSView,
+};
+use objc2_foundation::NSString;
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use tao::dpi::{LogicalSize, PhysicalPosition, PhysicalSize};
 use tao::event_loop::EventLoopWindowTarget;
@@ -132,16 +139,18 @@ fn core_dylib_path() -> String {
 /// GStreamer.framework). No-op for `cargo run` (the bundle dir won't exist). Must
 /// run before the dylib's `gst_init`, i.e. before `ap.start()`.
 fn set_bundled_gst_env() {
-    let Ok(exe) = std::env::current_exe() else { return };
+    let Ok(exe) = std::env::current_exe() else {
+        return;
+    };
     let Some(macos) = exe.parent() else { return }; // …/Foo.app/Contents/MacOS
-    // The tree itself always lives in Contents/Resources/GStreamer; whether a
-    // symlink to it exists at Contents/Frameworks/GStreamer depends on the
-    // release (make-app.sh's GST_SYMLINK — the symlink cannot ship in the same
-    // release that first teaches the updater to recreate symlinks). So PROBE
-    // both rather than hard-coding one: this is
-    // what lets an app and a bundle from different releases work together in
-    // either direction, which is exactly the pairing that has bitten this
-    // project repeatedly.
+                                                    // The tree itself always lives in Contents/Resources/GStreamer; whether a
+                                                    // symlink to it exists at Contents/Frameworks/GStreamer depends on the
+                                                    // release (make-app.sh's GST_SYMLINK — the symlink cannot ship in the same
+                                                    // release that first teaches the updater to recreate symlinks). So PROBE
+                                                    // both rather than hard-coding one: this is
+                                                    // what lets an app and a bundle from different releases work together in
+                                                    // either direction, which is exactly the pairing that has bitten this
+                                                    // project repeatedly.
     let Some(gst) = ["../Resources/GStreamer", "../Frameworks/GStreamer"]
         .iter()
         .map(|rel| macos.join(rel))
@@ -187,7 +196,11 @@ fn build_options(cfg: &Config) -> String {
     if cfg.debug_logging {
         a.push("-d".into());
     }
-    a.extend(["-nh", "-nohold", "-nc", "-hls"].iter().map(|s| s.to_string()));
+    a.extend(
+        ["-nh", "-nohold", "-nc", "-hls"]
+            .iter()
+            .map(|s| s.to_string()),
+    );
     a.extend(["-fps".into(), cfg.target_fps.to_string()]);
     a.extend(["-vsync".into(), "no".into()]);
     if cfg.enable_h265 {
@@ -344,6 +357,8 @@ fn wait_bounded(done: &AtomicBool, secs: f64) -> bool {
 
 struct Inner {
     window: Option<Window>,
+    waiting_label: Option<Retained<NSTextField>>,
+    window_dismissed: bool,
     airplay: Option<AirPlay>,
     nsview: usize,
     running: bool,
@@ -351,8 +366,8 @@ struct Inner {
     preferred_monitor: Option<u32>,
     // Async-teardown state (see `begin`). The engine worker is joined OFF the main
     // thread so the run loop never freezes; these track the in-flight transition.
-    transitioning: bool,          // a stop/restart join is running on a worker thread
-    next_cfg: Option<Config>,     // start with this once the current teardown finishes
+    transitioning: bool,      // a stop/restart join is running on a worker thread
+    next_cfg: Option<Config>, // start with this once the current teardown finishes
     queued: Option<Option<Config>>, // a request that arrived mid-transition (latest wins)
     // The in-flight teardown thread. Kept (not detached) so a Quit landing mid-
     // transition can WAIT for it — otherwise `stop_blocking` finds `airplay: None`,
@@ -374,6 +389,8 @@ impl Engine {
         Self {
             inner: RefCell::new(Inner {
                 window: None,
+                waiting_label: None,
+                window_dismissed: false,
                 airplay: None,
                 nsview: 0,
                 running: false,
@@ -388,24 +405,52 @@ impl Engine {
         }
     }
 
-    /// Create the hidden mirror window once the event loop is running and stash
-    /// its `NSView*`. Call from `StartCause::Init`.
+    /// Create the mirror window once the event loop is running, install its
+    /// native waiting state and stash its `NSView*`. Call from `StartCause::Init`.
     pub fn attach_window(&self, target: &EventLoopWindowTarget<AppEvent>) -> anyhow::Result<()> {
         let mut inner = self.inner.borrow_mut();
         if inner.window.is_some() {
             return Ok(());
         }
         let window = WindowBuilder::new()
-            .with_title(crate::config::MIRROR_WINDOW_TITLE)
+            .with_title(crate::config::WAITING_WINDOW_TITLE)
             .with_inner_size(LogicalSize::new(1280.0, 720.0))
+            .with_background_color((0, 0, 0, 255))
             .with_visible(false)
             .build(target)?;
         let nsview: usize = match window.window_handle()?.as_raw() {
             RawWindowHandle::AppKit(h) => h.ns_view.as_ptr() as usize,
             other => anyhow::bail!("expected AppKit window handle, got {other:?}"),
         };
+        let mtm = MainThreadMarker::new().ok_or_else(|| {
+            anyhow::anyhow!("mirror window must be attached on the AppKit main thread")
+        })?;
+        let root = unsafe { &*(nsview as *const NSView) };
+        let text = NSString::from_str(
+            "AGUARDANDO IPHONE\n\nNo iPhone: Central de Controle → Espelhamento de Tela → CAIXA PRETA",
+        );
+        let waiting_label = NSTextField::wrappingLabelWithString(&text, mtm);
+        waiting_label.setFrame(root.bounds());
+        waiting_label.setAutoresizingMask(
+            NSAutoresizingMaskOptions::ViewWidthSizable
+                | NSAutoresizingMaskOptions::ViewHeightSizable,
+        );
+        waiting_label.setAlignment(NSTextAlignment(2)); // NSTextAlignmentCenter
+        waiting_label.setMaximumNumberOfLines(0);
+        waiting_label.setFont(Some(&NSFont::systemFontOfSize(22.0)));
+        waiting_label.setTextColor(Some(&NSColor::whiteColor()));
+        // The video renderer adds its AVSampleBufferDisplayLayer later. Give
+        // this AppKit subview an explicit foreground z-position so the waiting
+        // instructions can reappear above the retained black video layer after
+        // an iPhone disconnects.
+        waiting_label.setWantsLayer(true);
+        if let Some(layer) = waiting_label.layer() {
+            layer.setZPosition(1.0);
+        }
+        root.addSubview(&waiting_label);
         eprintln!("[engine-macos] mirror window attached, NSView = {nsview:#x}");
         inner.nsview = nsview;
+        inner.waiting_label = Some(waiting_label);
         inner.window = Some(window);
         Ok(())
     }
@@ -452,7 +497,12 @@ impl Engine {
         inner.running = true;
         inner.fullscreen = cfg.fullscreen;
         inner.preferred_monitor = cfg.preferred_monitor;
-        eprintln!("[engine-macos] engine started (dylib: {dll}, fullscreen={})", cfg.fullscreen);
+        eprintln!(
+            "[engine-macos] engine started (dylib: {dll}, fullscreen={})",
+            cfg.fullscreen
+        );
+        drop(inner);
+        self.set_receiver_status(Status::Ready);
         Ok(())
     }
 
@@ -476,6 +526,9 @@ impl Engine {
     pub fn start(&self, cfg: &Config) -> anyhow::Result<()> {
         {
             let mut inner = self.inner.borrow_mut();
+            // A deliberate Start is a new presentation request, even if the
+            // user had closed the waiting window during an earlier run.
+            inner.window_dismissed = false;
             if inner.transitioning {
                 // A teardown is in flight — apply this start when it completes.
                 inner.queued = Some(Some(cfg.clone()));
@@ -533,7 +586,11 @@ impl Engine {
         let (queued, next, done) = {
             let mut inner = self.inner.borrow_mut();
             inner.transitioning = false;
-            (inner.queued.take(), inner.next_cfg.take(), inner.join.take())
+            (
+                inner.queued.take(),
+                inner.next_cfg.take(),
+                inner.join.take(),
+            )
         };
         // The teardown thread signals us as its very last act, so this join is
         // effectively instant — it just reaps the handle before `begin` overwrites it.
@@ -602,7 +659,9 @@ impl Engine {
                 flag.store(true, Ordering::SeqCst);
             });
             if !wait_bounded(&done, 3.0) {
-                eprintln!("[engine-macos] stop_blocking: teardown still running after 3s, exiting anyway");
+                eprintln!(
+                    "[engine-macos] stop_blocking: teardown still running after 3s, exiting anyway"
+                );
             }
         }
         let mut inner = self.inner.borrow_mut();
@@ -615,31 +674,71 @@ impl Engine {
         }
     }
 
-    /// Show or hide the mirror window (called from the StatusChanged handler on
-    /// the main thread). On show, fit the window to the content aspect.
-    pub fn set_mirror_visible(&self, visible: bool) {
-        let inner = self.inner.borrow();
-        let Some(w) = inner.window.as_ref() else {
-            eprintln!("[engine-macos] set_mirror_visible({visible}): NO WINDOW");
+    /// Move the receiver window between off, waiting and live-video states.
+    /// Called only from the AppKit/tao main thread.
+    pub fn set_receiver_status(&self, status: Status) {
+        let mut inner = self.inner.borrow_mut();
+        let Inner {
+            window,
+            waiting_label,
+            window_dismissed,
+            running,
+            fullscreen,
+            preferred_monitor,
+            pending_refit,
+            ..
+        } = &mut *inner;
+        let Some(w) = window.as_ref() else {
+            eprintln!("[engine-macos] set_receiver_status({status:?}): NO WINDOW");
             return;
         };
-        eprintln!("[engine-macos] set_mirror_visible({visible})");
-        if visible {
-            place_on_preferred_monitor(w, inner.preferred_monitor);
-            // Fit to the content aspect, then honour the Settings "fullscreen"
-            // checkbox (default off on macOS); otherwise stay windowed and the
-            // user can fullscreen manually (green button / Ctrl-Cmd-F).
-            self.fit_to_aspect(w, inner.preferred_monitor);
-            w.set_visible(true);
-            if inner.fullscreen {
-                w.set_fullscreen(Some(Fullscreen::Borderless(None)));
+        eprintln!("[engine-macos] set_receiver_status({status:?})");
+        match status {
+            Status::Connected => {
+                *window_dismissed = false;
+                if let Some(label) = waiting_label.as_ref() {
+                    label.setHidden(true);
+                }
+                w.set_title(crate::config::MIRROR_WINDOW_TITLE);
+                place_on_preferred_monitor(w, *preferred_monitor);
+                // Fit to the content aspect, then honour the Settings "fullscreen"
+                // checkbox (default off on macOS); otherwise stay windowed and the
+                // user can fullscreen manually (green button / Ctrl-Cmd-F).
+                Self::fit_to_aspect(w, *preferred_monitor);
+                w.set_visible(true);
+                if *fullscreen {
+                    w.set_fullscreen(Some(Fullscreen::Borderless(None)));
+                }
+                w.set_focus();
             }
-            w.set_focus();
-        } else {
-            w.set_fullscreen(None); // drop fullscreen if it was on
+            Status::Ready if *running && !*window_dismissed => {
+                w.set_fullscreen(None);
+                w.set_title(crate::config::WAITING_WINDOW_TITLE);
+                if let Some(label) = waiting_label.as_ref() {
+                    label.setHidden(false);
+                }
+                place_on_preferred_monitor(w, *preferred_monitor);
+                w.set_visible(true);
+                w.set_focus();
+                *pending_refit = false;
+            }
+            Status::Ready | Status::Off => {
+                w.set_fullscreen(None);
+                w.set_visible(false);
+                *pending_refit = false;
+            }
+        }
+    }
+
+    /// Hide the receiver window without stopping AirPlay advertisement. A later
+    /// incoming stream still presents itself; only the idle window stays quiet.
+    pub fn dismiss_window(&self) {
+        let mut inner = self.inner.borrow_mut();
+        inner.window_dismissed = true;
+        inner.pending_refit = false;
+        if let Some(w) = inner.window.as_ref() {
+            w.set_fullscreen(None);
             w.set_visible(false);
-            drop(inner);
-            self.inner.borrow_mut().pending_refit = false; // stale across sessions
         }
     }
 
@@ -654,13 +753,15 @@ impl Engine {
         if !inner.running {
             return;
         }
-        let Some(w) = inner.window.as_ref() else { return };
+        let Some(w) = inner.window.as_ref() else {
+            return;
+        };
         if inner.fullscreen || w.fullscreen().is_some() {
             drop(inner);
             self.inner.borrow_mut().pending_refit = true;
             return;
         }
-        self.fit_to_aspect(w, inner.preferred_monitor);
+        Self::fit_to_aspect(w, inner.preferred_monitor);
     }
 
     /// The mirror window resized — if a rotation happened while we were fullscreen,
@@ -670,7 +771,10 @@ impl Engine {
         let do_fit = {
             let inner = self.inner.borrow();
             inner.pending_refit
-                && inner.window.as_ref().map_or(false, |w| w.fullscreen().is_none())
+                && inner
+                    .window
+                    .as_ref()
+                    .map_or(false, |w| w.fullscreen().is_none())
         };
         if !do_fit {
             return;
@@ -678,7 +782,7 @@ impl Engine {
         let mut inner = self.inner.borrow_mut();
         inner.pending_refit = false;
         if let Some(w) = inner.window.as_ref() {
-            self.fit_to_aspect(w, inner.preferred_monitor);
+            Self::fit_to_aspect(w, inner.preferred_monitor);
         }
     }
 
@@ -692,7 +796,7 @@ impl Engine {
     /// Resize the (windowed) mirror to the current video aspect, centered within
     /// ~85% of its monitor's work area — so the portrait/landscape phone image
     /// fills the window instead of being pill/letterboxed.
-    fn fit_to_aspect(&self, w: &Window, preferred_monitor: Option<u32>) {
+    fn fit_to_aspect(w: &Window, preferred_monitor: Option<u32>) {
         let packed = ASPECT_WH.load(Ordering::SeqCst);
         if packed == 0 {
             return;
@@ -708,7 +812,9 @@ impl Engine {
                 PhysicalPosition::new(mon.rect.left, mon.rect.top),
             )
         } else {
-            let Some(mon) = w.current_monitor() else { return };
+            let Some(mon) = w.current_monitor() else {
+                return;
+            };
             (mon.size(), mon.position())
         };
         let (maxw, maxh) = (msize.width as f64 * 0.85, msize.height as f64 * 0.85);
@@ -730,7 +836,9 @@ impl Engine {
 /// entering borderless fullscreen. `Fullscreen::Borderless(None)` then targets
 /// this display without creating an exclusive-mode resolution switch.
 fn place_on_preferred_monitor(w: &Window, preferred_monitor: Option<u32>) {
-    let Some(mon) = crate::monitors::resolve(preferred_monitor) else { return };
+    let Some(mon) = crate::monitors::resolve(preferred_monitor) else {
+        return;
+    };
     // Keep a small inset while windowed so macOS accepts the monitor transition
     // before the optional borderless-fullscreen call immediately afterwards.
     w.set_outer_position(PhysicalPosition::new(

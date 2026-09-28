@@ -32,15 +32,16 @@ use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
-pub const APP_ID: &str = "OpenAirServer";              // data folder, registry, mutex
-pub const APP_NAME: &str = "Open Air Server";           // user-visible product name
+pub const APP_ID: &str = "OpenAirServer"; // data folder, registry, mutex
+pub const APP_NAME: &str = "Open Air Server"; // user-visible product name
 pub const MIRROR_WINDOW_TITLE: &str = "Caixa Preta — iPhone";
+pub const WAITING_WINDOW_TITLE: &str = "Caixa Preta — aguardando iPhone";
 pub const DEFAULT_DEVICE_NAME: &str = "CAIXA PRETA";
 // Windows-only: "PopyachsaTV" never shipped on macOS or Linux, so the migration
 // (and everything supporting it) is dead code there — see main()'s cfg(windows)
 // migration block for why it could not fire off Windows even if it had.
 #[cfg(windows)]
-pub const APP_ID_LEGACY: &str = "PopyachsaTV";        // pre-rename id; auto-migrate
+pub const APP_ID_LEGACY: &str = "PopyachsaTV"; // pre-rename id; auto-migrate
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
@@ -108,10 +109,20 @@ impl Default for Config {
             // choices and the per-OS engine maps these to GStreamer elements.
             // Windows: d3d11/wasapisink; macOS: VideoToolbox/Core-Audio; Linux &
             // other: auto-decode/system audio.
-            video_decoder: if cfg!(windows) { "d3d11" }
-                           else if cfg!(target_os = "macos") { "videotoolbox" }
-                           else { "auto" }.to_string(),
-            audio_sink: if cfg!(windows) { "wasapisink" } else { "autoaudiosink" }.to_string(),
+            video_decoder: if cfg!(windows) {
+                "d3d11"
+            } else if cfg!(target_os = "macos") {
+                "videotoolbox"
+            } else {
+                "auto"
+            }
+            .to_string(),
+            audio_sink: if cfg!(windows) {
+                "wasapisink"
+            } else {
+                "autoaudiosink"
+            }
+            .to_string(),
             // Debug logging OFF by default: with it on, UxPlay emits a per-frame
             // DEBUG line that floods the host log callback on the streaming thread
             // and adds noticeable latency. Markers ("Begin streaming" etc.) are
@@ -165,8 +176,9 @@ impl Config {
     pub fn try_load() -> Result<Self> {
         let path = config_path();
         match std::fs::read_to_string(&path) {
-            Ok(text) => serde_json::from_str(&text)
-                .with_context(|| format!("parsing {}", path.display())),
+            Ok(text) => {
+                serde_json::from_str(&text).with_context(|| format!("parsing {}", path.display()))
+            }
             // No file yet (first run, or the user deleted it): defaults ARE the
             // right answer, and main() writes them straight back to disk.
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Self::default()),
@@ -206,7 +218,8 @@ impl Config {
         // then rename over the target (atomic replace on one filesystem; on Windows
         // std::fs::rename uses MoveFileEx + REPLACE_EXISTING).
         let tmp = path.with_extension("json.tmp");
-        std::fs::write(&tmp, text.as_bytes()).with_context(|| format!("writing {}", tmp.display()))?;
+        std::fs::write(&tmp, text.as_bytes())
+            .with_context(|| format!("writing {}", tmp.display()))?;
         std::fs::rename(&tmp, &path).with_context(|| format!("replacing {}", path.display()))?;
         Ok(())
     }

@@ -70,6 +70,8 @@ use std::sync::{mpsc, Arc, Mutex};
 use anyhow::Result;
 use tao::event::{Event, StartCause};
 use tao::event_loop::{ControlFlow, EventLoopBuilder};
+#[cfg(target_os = "macos")]
+use tao::platform::macos::{ActivationPolicy, EventLoopExtMacOS};
 use tray_icon::menu::{CheckMenuItem, Menu, MenuEvent, MenuItem, PredefinedMenuItem};
 use tray_icon::{Icon, TrayIconBuilder, TrayIconEvent};
 
@@ -79,14 +81,14 @@ use crate::status::Status;
 use open_air_server::update;
 
 // Embed the .ico bytes so the dist exe has no run-time icon dependency.
-const ICON_OFF_BYTES:       &[u8] = include_bytes!("../icons/tray-off.ico");
-const ICON_READY_BYTES:     &[u8] = include_bytes!("../icons/tray-ready.ico");
+const ICON_OFF_BYTES: &[u8] = include_bytes!("../icons/tray-off.ico");
+const ICON_READY_BYTES: &[u8] = include_bytes!("../icons/tray-ready.ico");
 const ICON_CONNECTED_BYTES: &[u8] = include_bytes!("../icons/tray-connected.ico");
 
 fn icon_for(status: Status) -> Icon {
     let bytes = match status {
-        Status::Off       => ICON_OFF_BYTES,
-        Status::Ready     => ICON_READY_BYTES,
+        Status::Off => ICON_OFF_BYTES,
+        Status::Ready => ICON_READY_BYTES,
         Status::Connected => ICON_CONNECTED_BYTES,
     };
     // tray-icon wants raw RGBA + width/height. Decode the (embedded) .ico via
@@ -212,7 +214,10 @@ fn open_about_window(children: &Arc<Mutex<Vec<std::process::Child>>>) -> Result<
     // Re-launch ourselves with `--about` so eframe can own its event loop.
     let exe = std::env::current_exe()?;
     let child = std::process::Command::new(&exe).arg("--about").spawn()?;
-    children.lock().unwrap_or_else(|e| e.into_inner()).push(child);
+    children
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .push(child);
     prune_dead_children(children);
     Ok(())
 }
@@ -257,7 +262,9 @@ fn acquire_tray_single_instance() -> bool {
     use windows::Win32::System::Threading::CreateMutexW;
     let h = unsafe { CreateMutexW(None, false, w!("OpenAirServer.Tray.SingleInstance")) };
     let already = unsafe { GetLastError() } == ERROR_ALREADY_EXISTS;
-    if already { return false; }
+    if already {
+        return false;
+    }
     // Intentional leak so the mutex stays alive for the process's lifetime.
     std::mem::forget(h);
     true
@@ -273,7 +280,10 @@ fn open_settings_window(children: &Arc<Mutex<Vec<std::process::Child>>>) -> Resu
     // owns the eframe event loop, edits the config, writes it back, exits.
     let exe = std::env::current_exe()?;
     let child = std::process::Command::new(&exe).arg("--settings").spawn()?;
-    children.lock().unwrap_or_else(|e| e.into_inner()).push(child);
+    children
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .push(child);
     prune_dead_children(children);
     Ok(())
 }
@@ -393,7 +403,9 @@ fn spawn_update_apply(proxy: tao::event_loop::EventLoopProxy<AppEvent>, m: updat
 /// macOS: only a self-updatable AppImage — a distro package (.deb/.rpm) or a
 /// Flatpak is owned by its package manager, so we never ping the feed or offer an
 /// in-app install there (the user runs apt/dnf/pacman/flatpak instead).
-fn update_check_supported() -> bool { false }
+fn update_check_supported() -> bool {
+    false
+}
 
 /// Spawn `updater.exe` (sibling of our exe) to download + verify + swap in the
 /// new build. It waits for our PID to exit before touching files, so the caller
@@ -407,11 +419,16 @@ fn launch_updater(m: &update::Manifest) -> Result<()> {
         .map(|p| p.to_path_buf())
         .ok_or_else(|| anyhow::anyhow!("exe has no parent directory"))?;
     let mut cmd = std::process::Command::new(dir.join("updater.exe"));
-    cmd.arg("--url").arg(&m.url)
-        .arg("--sha256").arg(&m.sha256)
-        .arg("--dir").arg(&dir)
-        .arg("--relaunch").arg(&exe)
-        .arg("--wait-pid").arg(std::process::id().to_string());
+    cmd.arg("--url")
+        .arg(&m.url)
+        .arg("--sha256")
+        .arg(&m.sha256)
+        .arg("--dir")
+        .arg(&dir)
+        .arg("--relaunch")
+        .arg(&exe)
+        .arg("--wait-pid")
+        .arg(std::process::id().to_string());
     if !m.mirror_url.trim().is_empty() {
         cmd.arg("--mirror-url").arg(m.mirror_url.trim());
     }
@@ -482,8 +499,11 @@ fn redirect_stdio_to_log() {
     // ever appeared came from the dnssd shim, which writes to stderr and flushes.
     // Everything else went to a stream nobody was reading.
     extern "C" {
-        fn _wfreopen(path: *const u16, mode: *const u16, stream: *mut core::ffi::c_void)
-            -> *mut core::ffi::c_void;
+        fn _wfreopen(
+            path: *const u16,
+            mode: *const u16,
+            stream: *mut core::ffi::c_void,
+        ) -> *mut core::ffi::c_void;
         fn __acrt_iob_func(idx: u32) -> *mut core::ffi::c_void;
         fn _dup2(fd1: i32, fd2: i32) -> i32;
         fn _fileno(stream: *mut core::ffi::c_void) -> i32;
@@ -540,11 +560,16 @@ fn redirect_stdio_to_log() {
     let dir = engine::engine_log_dir();
     let _ = std::fs::create_dir_all(&dir);
     let file = match std::fs::OpenOptions::new()
-        .create(true).write(true).truncate(true)
+        .create(true)
+        .write(true)
+        .truncate(true)
         .open(dir.join("engine.log"))
     {
         Ok(f) => f,
-        Err(e) => { eprintln!("[log] {}: {e}", dir.display()); return; }
+        Err(e) => {
+            eprintln!("[log] {}: {e}", dir.display());
+            return;
+        }
     };
     let fd = file.as_raw_fd();
     unsafe {
@@ -576,7 +601,9 @@ fn main() -> Result<()> {
     // (GTK/tray and our engine worker thread both touch X), so do it FIRST — before
     // the tray, the engine, or any window exists.
     #[cfg(target_os = "linux")]
-    unsafe { x11::xlib::XInitThreads(); }
+    unsafe {
+        x11::xlib::XInitThreads();
+    }
 
     // Pre-set AVAHI_COMPAT_NOWARN so the bundled UxPlay engine SKIPS its own
     // `putenv("AVAHI_COMPAT_NOWARN=1")` (uxplay.cpp): that putenv stores a pointer
@@ -610,7 +637,9 @@ fn main() -> Result<()> {
             use windows::Win32::System::Console::{AttachConsole, ATTACH_PARENT_PROCESS};
             let _ = AttachConsole(ATTACH_PARENT_PROCESS);
         }
-        for i in net_interfaces::list() { println!("{}\t{}", i.name, i.ip); }
+        for i in net_interfaces::list() {
+            println!("{}\t{}", i.name, i.ip);
+        }
         return Ok(());
     }
     if !args.iter().any(|a| a == "--settings" || a == "--about") {
@@ -664,11 +693,17 @@ fn main() -> Result<()> {
         let old_dir = config::legacy_data_dir();
         if !new_dir.exists() && old_dir.exists() {
             if let Err(e) = std::fs::rename(&old_dir, &new_dir) {
-                eprintln!("[migrate] failed to move {} -> {}: {e}",
-                          old_dir.display(), new_dir.display());
+                eprintln!(
+                    "[migrate] failed to move {} -> {}: {e}",
+                    old_dir.display(),
+                    new_dir.display()
+                );
             } else {
-                eprintln!("[migrate] moved {} -> {}",
-                          old_dir.display(), new_dir.display());
+                eprintln!(
+                    "[migrate] moved {} -> {}",
+                    old_dir.display(),
+                    new_dir.display()
+                );
             }
         }
     }
@@ -693,7 +728,11 @@ fn main() -> Result<()> {
     let cfg = Arc::new(Mutex::new(Config::load()));
 
     // Keep the autostart registry entry in sync with config on startup.
-    autostart::sync(cfg.lock().unwrap_or_else(|e| e.into_inner()).autostart_with_windows);
+    autostart::sync(
+        cfg.lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .autostart_with_windows,
+    );
 
     // The single in-process engine, shared between event-loop callbacks.
     let engine = Arc::new(Engine::new());
@@ -707,7 +746,9 @@ fn main() -> Result<()> {
 
     // Always-on-top state: menu toggle + engine.set_topmost. No more log/focus
     // watchers — the engine owns its window in-process.
-    let always_on_top = Arc::new(AtomicBool::new(cfg.lock().unwrap_or_else(|e| e.into_inner()).always_on_top));
+    let always_on_top = Arc::new(AtomicBool::new(
+        cfg.lock().unwrap_or_else(|e| e.into_inner()).always_on_top,
+    ));
 
     // Watch config.json on disk: when the user edits/saves it, reload + restart.
     {
@@ -715,10 +756,12 @@ fn main() -> Result<()> {
         let stop = stop_flag.clone();
         std::thread::spawn(move || {
             let path = config::config_path();
-            let mut last_mtime: Option<std::time::SystemTime> = std::fs::metadata(&path)
-                .and_then(|m| m.modified()).ok();
+            let mut last_mtime: Option<std::time::SystemTime> =
+                std::fs::metadata(&path).and_then(|m| m.modified()).ok();
             loop {
-                if *stop.lock().unwrap_or_else(|e| e.into_inner()) { return; }
+                if *stop.lock().unwrap_or_else(|e| e.into_inner()) {
+                    return;
+                }
                 std::thread::sleep(std::time::Duration::from_millis(800));
                 if let Ok(meta) = std::fs::metadata(&path) {
                     if let Ok(t) = meta.modified() {
@@ -734,22 +777,39 @@ fn main() -> Result<()> {
     }
 
     // tao event loop with our custom UserEvent.
-    let event_loop = EventLoopBuilder::<AppEvent>::with_user_event().build();
+    let mut event_loop = EventLoopBuilder::<AppEvent>::with_user_event().build();
+    // tao defaults to a regular foreground application even when Info.plist
+    // declares LSUIElement. Make the runtime policy match this menu-bar app:
+    // no stray Dock icon, while its independent receiver window can still be
+    // shown and focused when the user launches it or a stream connects.
+    #[cfg(target_os = "macos")]
+    {
+        event_loop.set_activation_policy(ActivationPolicy::Accessory);
+        event_loop.set_dock_visibility(false);
+    }
     let proxy = event_loop.create_proxy();
 
     // Forward muda + tray-icon events into the tao loop.
     {
         let p = proxy.clone();
-        MenuEvent::set_event_handler(Some(move |ev| { let _ = p.send_event(AppEvent::Menu(ev)); }));
+        MenuEvent::set_event_handler(Some(move |ev| {
+            let _ = p.send_event(AppEvent::Menu(ev));
+        }));
         let p = proxy.clone();
-        TrayIconEvent::set_event_handler(Some(move |ev| { let _ = p.send_event(AppEvent::Tray(ev)); }));
+        TrayIconEvent::set_event_handler(Some(move |ev| {
+            let _ = p.send_event(AppEvent::Tray(ev));
+        }));
     }
 
     // Forward channel events (config changes) into the loop.
     {
         let p = proxy.clone();
         std::thread::spawn(move || {
-            for ev in rx { if p.send_event(ev).is_err() { return; } }
+            for ev in rx {
+                if p.send_event(ev).is_err() {
+                    return;
+                }
+            }
         });
     }
 
@@ -806,7 +866,11 @@ fn main() -> Result<()> {
     // macOS: deferred to StartCause::Init — the mirror window (and thus the
     // engine's host NSView) only exists once the event loop is running.
     #[cfg(not(target_os = "macos"))]
-    if cfg.lock().unwrap_or_else(|e| e.into_inner()).autostart_on_app_launch {
+    if cfg
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .autostart_on_app_launch
+    {
         let c = cfg.lock().unwrap_or_else(|e| e.into_inner()).clone();
         report_engine_start(engine.start(&c), "[engine] autostart failed", &c, false);
     }
@@ -815,12 +879,18 @@ fn main() -> Result<()> {
     // (modal) if it finds one; AppImage/macOS apply via their per-OS module.
     // Skipped on installs the package manager owns (no feed ping) — see
     // update_check_supported().
-    if cfg.lock().unwrap_or_else(|e| e.into_inner()).check_updates_on_launch && update_check_supported() {
+    if cfg
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .check_updates_on_launch
+        && update_check_supported()
+    {
         spawn_update_check(proxy.clone(), false);
     }
 
     let mut current_status = Status::Off;
-    let mut current_lang = i18n::Lang::from_config(&cfg.lock().unwrap_or_else(|e| e.into_inner()).language);
+    let mut current_lang =
+        i18n::Lang::from_config(&cfg.lock().unwrap_or_else(|e| e.into_inner()).language);
     let mut tray_icon: Option<tray_icon::TrayIcon> = None;
     let mut ids: Option<MenuIds> = None;
 
@@ -891,10 +961,11 @@ fn main() -> Result<()> {
                                 "[engine] start failed", &c, false);
                         }
                         current_status = s;
-                        // macOS: show the mirror window while a device streams,
-                        // hide it otherwise (engine reports over this channel).
+                        // macOS: the same independent window presents a clear
+                        // waiting state while advertised and becomes the video
+                        // window as soon as a device starts streaming.
                         #[cfg(target_os = "macos")]
-                        engine.set_mirror_visible(s == Status::Connected);
+                        engine.set_receiver_status(s);
                         let (m, new_ids) = build_menu(engine.is_running(), current_status,
                                                       always_on_top.load(Ordering::Relaxed), current_lang);
                         *ids_ref = new_ids;
@@ -1159,6 +1230,10 @@ fn main() -> Result<()> {
             // stop() releases the sink first.) The tray stays in the running state.
             #[cfg(target_os = "macos")]
             Event::WindowEvent { event: tao::event::WindowEvent::CloseRequested, .. } => {
+                // Remember that this particular window was dismissed, so the
+                // receiver can keep advertising from the menu bar without
+                // immediately reopening a waiting window after the restart.
+                engine.dismiss_window();
                 let c = cfg.lock().unwrap().clone();
                 report_engine_start(engine.restart(&c),
                                     "[engine-macos] restart on window close", &c, false);

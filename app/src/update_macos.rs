@@ -76,7 +76,10 @@ pub fn apply(m: &Manifest) -> Result<PathBuf> {
     // 2. Verify against the SIGNED hash before touching anything.
     let got = update::sha256_hex(&bytes);
     if !got.eq_ignore_ascii_case(m.sha256.trim()) {
-        bail!("downloaded zip sha256 {got} != signed {} — refusing", m.sha256.trim());
+        bail!(
+            "downloaded zip sha256 {got} != signed {} — refusing",
+            m.sha256.trim()
+        );
     }
 
     // 3. Unzip to a staging dir on the SAME filesystem (so the final rename is
@@ -88,8 +91,8 @@ pub fn apply(m: &Manifest) -> Result<PathBuf> {
     let _ = std::fs::remove_dir_all(&staging);
     std::fs::create_dir_all(&staging).map_err(|e| anyhow!("create staging dir: {e}"))?;
     unzip(&bytes, &staging)?;
-    let new_app = find_app(&staging)?
-        .ok_or_else(|| anyhow!("no .app found inside the downloaded zip"))?;
+    let new_app =
+        find_app(&staging)?.ok_or_else(|| anyhow!("no .app found inside the downloaded zip"))?;
 
     // 4. Strip the download quarantine so Gatekeeper doesn't re-prompt.
     let _ = Command::new("xattr")
@@ -189,7 +192,9 @@ fn unzip(bytes: &[u8], dest: &Path) -> Result<()> {
         // the root, but it KEEPS interior `..` components (`a/../b`). Refuse them:
         // it costs nothing (a ditto'd bundle has none) and it buys the invariant
         // that `dest.join(rel)` is dest plus plain components.
-        let Some(rel) = entry.enclosed_name() else { continue };
+        let Some(rel) = entry.enclosed_name() else {
+            continue;
+        };
         if rel.components().any(|c| matches!(c, Component::ParentDir)) {
             bail!("zip entry {} contains `..`", rel.display());
         }
