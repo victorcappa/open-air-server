@@ -1,0 +1,41 @@
+# Maintainer: Recluse <me@recluse.ru>
+#
+# Binary AUR package over the published Linux release tarball (layout in
+# ../README.md). On each release: bump pkgver/pkgrel + sha256sums, then
+# regenerate .SRCINFO:  makepkg --printsrcinfo > .SRCINFO
+pkgname=popyachsa-airplay-bin
+_appid=com.popyachsa.AirPlay
+pkgver=0.2.15
+pkgrel=1
+pkgdesc="AirPlay receiver — mirror iPhone, iPad or Mac to your screen (Wi-Fi, low-latency)"
+arch=('x86_64')
+url="https://airplay.popyachsa.com"
+license=('GPL-3.0-or-later')
+# glib-networking: GIO's TLS backend, loaded by name; without it HTTPS HLS
+# segments fail and AirPlay video dies with "Couldn't download fragments".
+depends=('avahi' 'gtk3' 'gst-libav' 'gst-plugins-base' 'gst-plugins-good'
+         'gst-plugins-bad' 'glib-networking' 'libplist' 'openssl'
+         'libayatana-appindicator' 'xdotool')
+optdepends=('gstreamer-vaapi: Intel/AMD hardware H.264/H.265 decode'
+            'intel-media-driver: Intel HW decode (Gen8+)'
+            'libva-mesa-driver: AMD / older-Intel HW decode')
+provides=('popyachsa-airplay')
+conflicts=('popyachsa-airplay')
+options=('!strip')   # binary + .so are already stripped at release
+source=("popyachsa-airplay-${pkgver}-x86_64.tar.gz::https://dl.airplay.popyachsa.com/popyachsa-airplay-${pkgver}-x86_64.tar.gz")
+sha256sums=('d31a3ab33198c11272050c967a9fd247e4540ce77f9a8400b7a96ccade7b4b37')
+
+package() {
+    cd "$srcdir"
+    # Engine binary + dlopen'd core, co-located (core_so_path finds the .so next
+    # to the binary that current_exe() resolves the /usr/bin symlink to).
+    install -dm755 "$pkgdir/usr/lib/popyachsa-airplay"
+    install -m755 popyachsa-airplay "$pkgdir/usr/lib/popyachsa-airplay/popyachsa-airplay"
+    install -m755 uxplay-core.so    "$pkgdir/usr/lib/popyachsa-airplay/uxplay-core.so"
+    install -dm755 "$pkgdir/usr/bin"
+    ln -s ../lib/popyachsa-airplay/popyachsa-airplay "$pkgdir/usr/bin/popyachsa-airplay"
+
+    install -Dm644 "${_appid}.desktop"      "$pkgdir/usr/share/applications/${_appid}.desktop"
+    install -Dm644 "${_appid}.png"          "$pkgdir/usr/share/icons/hicolor/256x256/apps/${_appid}.png"
+    install -Dm644 "${_appid}.metainfo.xml" "$pkgdir/usr/share/metainfo/${_appid}.metainfo.xml"
+}

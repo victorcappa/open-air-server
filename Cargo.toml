@@ -1,0 +1,26 @@
+# Open Air Server — Cargo workspace.
+#   app/             the tray + host-window application (the binary)
+#   airplay-lib/     safe Rust wrapper over the engine's C ABI
+#   airplay-lib-sys/ raw FFI + runtime dlopen of uxplay-core.{dll,so,dylib}
+#
+# The engine itself (uxplay-core) is built separately from the third_party/uxplay
+# submodule — see BUILD.md.
+[workspace]
+resolver = "2"
+members = ["app", "airplay-lib", "airplay-lib-sys"]
+# Standalone render smoke-test for the macOS port: its own workspace, built by
+# hand against a freshly built dylib (see build/macos/README.md).
+exclude = ["m3-smoke-mac"]
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = true
+panic = "abort"
+
+# An `extern "C"` callback must never unwind into C frames. Callback bodies also
+# use `catch_unwind`; this keeps every normal development binary on the safe side
+# of that FFI boundary. The test profile retains Cargo's default unwind behavior.
+[profile.dev]
+panic = "abort"
