@@ -27,6 +27,11 @@ pub static START_FAILED: AtomicBool = AtomicBool::new(false);
 /// think they are and the only other record of that is a line in engine.log.
 pub static PIN_IGNORED: AtomicBool = AtomicBool::new(false);
 
+/// Direct AirPlay was requested but the native macOS AirPlay Receiver switch is
+/// off. That switch enables the OS-level peer interface UxPlay needs; retain the
+/// cause so the host can give the user an actionable notification.
+pub static P2P_SETUP_REQUIRED: AtomicBool = AtomicBool::new(false);
+
 /// Clear the per-run flags. Called by each engine backend where it already resets
 /// its other per-run statics, i.e. BEFORE the engine can log anything — so a flag
 /// can never leak from the previous run into this one (the user fixes the adapter,
@@ -34,6 +39,7 @@ pub static PIN_IGNORED: AtomicBool = AtomicBool::new(false);
 pub fn reset_run_flags() {
     START_FAILED.store(false, std::sync::atomic::Ordering::SeqCst);
     PIN_IGNORED.store(false, std::sync::atomic::Ordering::SeqCst);
+    P2P_SETUP_REQUIRED.store(false, std::sync::atomic::Ordering::SeqCst);
 }
 
 /// Did the engine just say it is ignoring the pinned adapter?
@@ -84,6 +90,7 @@ pub fn is_fatal_start_line(msg: &str) -> bool {
         || msg.starts_with("DNSServiceRegister call returned")
         || msg.starts_with("No DNS-SD Server found")
         || msg.starts_with("Could not initialize dnssd library!")
+        || msg.starts_with("AIR_SERVER_P2P_REQUIRES_NATIVE_RECEIVER")
         // start_raop_server(): raop_init/raop_init2 refused (ports held by
         // another instance, bad key file).
         || msg.starts_with("Error initializing raop")
@@ -112,6 +119,7 @@ mod tests {
             "No DNS-SD Server found (DNSServiceRegister call returned kDNSServiceErr_Unknown)",
             "DNSServiceRegister call returned kDNSServiceErr_NameConflict",
             "Could not initialize dnssd library!: error -65537",
+            "AIR_SERVER_P2P_REQUIRES_NATIVE_RECEIVER: enable AirPlay Receiver",
             "Error initializing raop!",
             // -rc: rejected before parse_arguments, hence no "stopping:" prefix.
             "startup file /home/u/gone.rc specified by option -rc was not found",

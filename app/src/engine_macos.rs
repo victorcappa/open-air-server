@@ -52,6 +52,9 @@ use crate::AppEvent;
 // demoting either to DEBUG silently breaks show-on-connect and aspect-fit.
 const MARK_CONNECTED: &str = "Begin streaming";
 const MARK_TEARDOWN: &str = "Open connections: 0";
+const PIN_MARKER: &str = "AIR_SERVER_PIN=";
+const WAITING_INSTRUCTIONS: &str =
+    "AGUARDANDO IPHONE\n\nNo iPhone: Central de Controle → Espelhamento de Tela → AIR SERVER";
 
 // Shared with the C log callback (engine is single-instance).
 static STATUS_TX: Mutex<Option<Sender<Status>>> = Mutex::new(None);
@@ -60,6 +63,24 @@ static CONNECTED: AtomicBool = AtomicBool::new(false);
 // "begin video stream wxh = WxH" log line; used to fit the window to the content
 // aspect (no black bars).
 static ASPECT_WH: AtomicU64 = AtomicU64::new(0);
+// A first-time AWDL peer is protected by UxPlay's one-time legacy-pairing PIN.
+// The C engine reports it through PIN_MARKER; the main thread reads this value
+// when Status::Ready is resent and updates the existing native waiting label.
+static PAIRING_PIN: Mutex<Option<String>> = Mutex::new(None);
+
+fn parse_pairing_pin(line: &str) -> Option<&str> {
+    let pin = line.strip_prefix(PIN_MARKER)?.trim();
+    (pin.len() == 4 && pin.bytes().all(|b| b.is_ascii_digit())).then_some(pin)
+}
+
+fn waiting_message() -> String {
+    match PAIRING_PIN.lock().unwrap().as_deref() {
+        Some(pin) => {
+            format!("CÓDIGO AIRPLAY\n\n{pin}\n\nDigite este código no iPhone para conectar")
+        }
+        None => WAITING_INSTRUCTIONS.to_string(),
+    }
+}
 
 /// Main installs a sender so connection transitions reach the tray icon.
 pub fn install_status_sender(tx: Sender<Status>) {
@@ -199,7 +220,7 @@ fn build_options(cfg: &Config) -> String {
         a.push("-d".into());
     }
     a.extend(
-        ["-nh", "-nohold", "-nc", "-hls"]
+        ["-nh", "-nohold", "-nc", "-hls", "-p2p"]
             .iter()
             .map(|s| s.to_string()),
     );
@@ -236,12 +257,10 @@ fn build_options(cfg: &Config) -> String {
     // Do not request the iPhone's periodic performance plist in production.
     // UxPlay writes the full report through the streaming log callback; that is
     // useful while profiling but adds recurring parsing, callback and disk I/O.
-    // Bind + advertise on ONE adapter (fork-only `-bind`). Omitted when unset so
-    // the argv tail stays byte-identical to what shipped before this setting
-    // existed. custom_flags stays last, so a hand-typed -bind there still wins.
-    if let Some(ip) = crate::net_interfaces::bind_arg(cfg.bind_ip.as_deref()) {
-        a.extend(["-bind".into(), ip.to_string()]);
-    }
+    // Peer-to-peer uses AWDL, which is a separate interface chosen dynamically
+    // by macOS. A stored LAN adapter pin would bind the listening sockets to the
+    // wrong interface and make a directly connected iPhone see but not reach us,
+    // so macOS deliberately ignores that legacy setting in -p2p mode.
     if !cfg.custom_flags.trim().is_empty() {
         for tok in cfg.custom_flags.split_whitespace() {
             a.push(tok.to_string());
@@ -267,7 +286,19 @@ mod option_tests {
         assert!(options.contains("-vsync no"));
         assert!(options.contains("-vd vtdec"));
         assert!(options.contains("-vs avlayer"));
+        assert!(options.contains("-p2p"));
+        assert!(!options.contains("-bind"));
         assert!(!options.contains("-FPSdata"));
+    }
+
+    #[test]
+    fn parses_only_the_private_four_digit_pairing_marker() {
+        assert_eq!(
+            super::parse_pairing_pin("AIR_SERVER_PIN=0042"),
+            Some("0042")
+        );
+        assert_eq!(super::parse_pairing_pin("AIR_SERVER_PIN=42"), None);
+        assert_eq!(super::parse_pairing_pin("pin = 0042"), None);
     }
 }
 
@@ -293,6 +324,18 @@ extern "C" fn engine_log_cb(_level: c_int, msg: *const c_char, _user: *mut c_voi
         return;
     }
     let text = unsafe { CStr::from_ptr(msg) }.to_string_lossy();
+
+    if text.starts_with("AIR_SERVER_P2P_REQUIRES_NATIVE_RECEIVER") {
+        crate::status::P2P_SETUP_REQUIRED.store(true, Ordering::SeqCst);
+    }
+
+    if let Some(pin) = parse_pairing_pin(&text) {
+        *PAIRING_PIN.lock().unwrap() = Some(pin.to_string());
+        // The receiver is already Ready; resend the state solely to refresh the
+        // native waiting window on AppKit's main thread.
+        send_status(Status::Ready);
+        return;
+    }
 
     // The engine gave up during startup. Nothing else will ever tell us: the C ABI
     // called this run a success the moment the worker spawned, so without this the
@@ -347,6 +390,7 @@ extern "C" fn engine_log_cb(_level: c_int, msg: *const c_char, _user: *mut c_voi
     // (macOS always re-inits the pipeline). Reliable; the wxh line was not.
     if text.contains(MARK_CONNECTED) {
         if !CONNECTED.swap(true, Ordering::SeqCst) {
+            PAIRING_PIN.lock().unwrap().take();
             eprintln!("[engine-macos] Begin streaming -> show");
             send_status(Status::Connected);
         }
@@ -452,9 +496,7 @@ impl Engine {
             anyhow::anyhow!("mirror window must be attached on the AppKit main thread")
         })?;
         let root = unsafe { &*(nsview as *const NSView) };
-        let text = NSString::from_str(
-            "AGUARDANDO IPHONE\n\nNo iPhone: Central de Controle → Espelhamento de Tela → AIR SERVER",
-        );
+        let text = NSString::from_str(&waiting_message());
         let waiting_label = NSTextField::wrappingLabelWithString(&text, mtm);
         waiting_label.setFrame(root.bounds());
         waiting_label.setAutoresizingMask(
@@ -507,6 +549,7 @@ impl Engine {
         ap.set_options(&build_options(cfg))?;
         CONNECTED.store(false, Ordering::SeqCst);
         ASPECT_WH.store(0, Ordering::SeqCst);
+        PAIRING_PIN.lock().unwrap().take();
         // Per-run, like the two above: last run's failure / ignored-pin verdict must
         // not outlive it, or the tray keeps warning about an adapter already fixed.
         crate::status::reset_run_flags();
@@ -741,6 +784,8 @@ impl Engine {
                 w.set_fullscreen(None);
                 w.set_title(crate::config::WAITING_WINDOW_TITLE);
                 if let Some(label) = waiting_label.as_ref() {
+                    let text = NSString::from_str(&waiting_message());
+                    label.setStringValue(&text);
                     label.setHidden(false);
                 }
                 place_on_preferred_monitor(w, *preferred_monitor);

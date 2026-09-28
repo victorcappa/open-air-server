@@ -18,5 +18,7 @@ rsync -a --delete --exclude .git/ "$vendor_src/" "$prepared_src/"
 cp "$repo_dir/uxplay-patches/avsample_sink.m" "$prepared_src/renderers/avsample_sink.m"
 patch --silent --forward -d "$prepared_src" -p1 \
   < "$repo_dir/uxplay-patches/low-latency-macos.diff"
+patch --silent --forward -d "$prepared_src" -p1 \
+  < "$repo_dir/uxplay-patches/awdl-p2p-macos.diff"
 
 echo "$prepared_src"

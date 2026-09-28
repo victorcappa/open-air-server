@@ -1,0 +1,272 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -49,6 +49,12 @@
+   set( CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE )
+ endif()
+ 
++# macOS uses Apple's Bonjour implementation. Expose the opt-in peer-to-peer
++# path used by -p2p (AWDL / direct AirPlay discovery and sockets).
++if( APPLE )
++  add_definitions( -DUXPLAY_HAVE_APPLE_P2P )
++endif()
++
+ add_subdirectory( lib/llhttp )
+ add_subdirectory( lib/playfair )
+ add_subdirectory( lib )
+diff --git a/lib/dnssd.c b/lib/dnssd.c
+--- a/lib/dnssd.c
++++ b/lib/dnssd.c
+@@ -39,6 +39,7 @@
+ #include "dnssdint.h"
+ #include "global.h"
+ #include "utils.h"
++#include "netutils.h"
+ 
+ #define MAX_DEVICEID 18
+ #define MAX_SERVNAME 256
+@@ -154,6 +155,10 @@
+     unsigned char pin_pw;
+ 
+     uint32_t interface_index;   /* 0 = kDNSServiceInterfaceIndexAny (advertise everywhere) */
++
++#if defined(__APPLE__) && defined(UXPLAY_HAVE_APPLE_P2P)
++    int peer_to_peer;
++#endif
+ };
+ 
+ 
+@@ -347,7 +352,15 @@
+     strncat(servname, dnssd->name, sizeof(servname)-strlen(servname)-1);
+ 
+     /* Register the service */
+-    DNSServiceErrorType retval = dnssd->DNSServiceRegister(&dnssd->raop_service, 0, dnssd->interface_index,
++    DNSServiceFlags flags = 0;
++    uint32_t interface_index = dnssd->interface_index;
++#if defined(__APPLE__) && defined(UXPLAY_HAVE_APPLE_P2P)
++    if (dnssd->peer_to_peer) {
++        flags = kDNSServiceFlagsIncludeP2P | kDNSServiceFlagsIncludeAWDL;
++        interface_index = kDNSServiceInterfaceIndexAny;
++    }
++#endif
++    DNSServiceErrorType retval = dnssd->DNSServiceRegister(&dnssd->raop_service, flags, interface_index,
+                                                           servname, "_raop._tcp",
+                                                           NULL, NULL,
+                                                           htons(port),
+@@ -400,7 +413,15 @@
+     dnssd->TXTRecordSetValue(&dnssd->airplay_record, "vv", strlen(AIRPLAY_VV), AIRPLAY_VV);
+ 
+     /* Register the service */
+-    DNSServiceErrorType retval = dnssd->DNSServiceRegister(&dnssd->airplay_service, 0, dnssd->interface_index,
++    DNSServiceFlags flags = 0;
++    uint32_t interface_index = dnssd->interface_index;
++#if defined(__APPLE__) && defined(UXPLAY_HAVE_APPLE_P2P)
++    if (dnssd->peer_to_peer) {
++        flags = kDNSServiceFlagsIncludeP2P | kDNSServiceFlagsIncludeAWDL;
++        interface_index = kDNSServiceInterfaceIndexAny;
++    }
++#endif
++    DNSServiceErrorType retval = dnssd->DNSServiceRegister(&dnssd->airplay_service, flags, interface_index,
+                                                            dnssd->name, "_airplay._tcp",
+                                                            NULL, NULL,
+                                                            htons(port),
+@@ -495,6 +516,14 @@
+     dnssd->interface_index = interface_index;
+ }
+ 
++#if defined(__APPLE__) && defined(UXPLAY_HAVE_APPLE_P2P)
++void dnssd_set_peer_to_peer(dnssd_t *dnssd, int enabled) {
++    assert(dnssd);
++    dnssd->peer_to_peer = enabled ? 1 : 0;
++    netutils_set_peer_to_peer(dnssd->peer_to_peer);
++}
++#endif
++
+ void dnssd_set_airplay_features(dnssd_t *dnssd, int bit, int val) {
+     uint32_t mask = 0;
+     uint32_t *features = 0;
+diff --git a/lib/dnssd.h b/lib/dnssd.h
+--- a/lib/dnssd.h
++++ b/lib/dnssd.h
+@@ -50,6 +50,10 @@
+ DNSSD_API void dnssd_set_pk(dnssd_t *dnssd, char * pk_str);
+ DNSSD_API void dnssd_set_interface_index(dnssd_t *dnssd, uint32_t interface_index);
+ 
++#if defined(__APPLE__) && defined(UXPLAY_HAVE_APPLE_P2P)
++DNSSD_API void dnssd_set_peer_to_peer(dnssd_t *dnssd, int enabled);
++#endif
++
+ DNSSD_API void dnssd_destroy(dnssd_t *dnssd);
+ 
+ #ifdef __cplusplus
+diff --git a/lib/netutils.c b/lib/netutils.c
+--- a/lib/netutils.c
++++ b/lib/netutils.c
+@@ -18,9 +18,24 @@
+ #include <stdlib.h>
+ #include <string.h>
+ #include <assert.h>
++#include <stdio.h>
+ 
+ #include "compat.h"
+ 
++#if defined(__APPLE__) && defined(UXPLAY_HAVE_APPLE_P2P)
++#ifndef SO_RECV_ANYIF
++/* XNU private option used by Apple's peer-to-peer AirPlay transport. */
++#define SO_RECV_ANYIF 0x1104
++#endif
++static int peer_to_peer = 0;
++
++void
++netutils_set_peer_to_peer(int enabled)
++{
++    peer_to_peer = enabled ? 1 : 0;
++}
++#endif
++
+ /* -bind: one local address per family for every listening socket.  INADDR_ANY /
+  * all-zero (== in6addr_any) = the historical behaviour, and is what every path
+  * sees unless -bind was given and validated.
+@@ -221,6 +236,18 @@
+         goto cleanup;
+     }
+ 
++#if defined(__APPLE__) && defined(UXPLAY_HAVE_APPLE_P2P)
++    if (peer_to_peer) {
++        int recv_any_if = 1;
++        ret = setsockopt(server_fd, SOL_SOCKET, SO_RECV_ANYIF,
++                         &recv_any_if, sizeof(recv_any_if));
++        if (ret == -1) {
++            fprintf(stderr, "setsockopt(SO_RECV_ANYIF) failed: %s\n", strerror(errno));
++            goto cleanup;
++        }
++    }
++#endif
++
+     memset(&saddr, 0, sizeof(saddr));
+     if (use_ipv6) {
+         struct sockaddr_in6 *sin6ptr = (struct sockaddr_in6 *)&saddr;
+diff --git a/lib/netutils.h b/lib/netutils.h
+--- a/lib/netutils.h
++++ b/lib/netutils.h
+@@ -52,6 +52,10 @@
+  * connects back into our own httpd, which no longer listens on loopback. */
+ const char *netutils_get_bind_host(void);
+ 
++#if defined(__APPLE__) && defined(UXPLAY_HAVE_APPLE_P2P)
++void netutils_set_peer_to_peer(int enabled);
++#endif
++
+ int netutils_init_socket(unsigned short *port, int use_ipv6, int use_udp);
+ unsigned char *netutils_get_address(void *sockaddr, int *length, unsigned int *zone_id, unsigned short *port);
+ int netutils_parse_address(int family, const char *src, void *dst, int dstlen);
+diff --git a/uxplay.cpp b/uxplay.cpp
+--- a/uxplay.cpp
++++ b/uxplay.cpp
+@@ -28,8 +28,10 @@
+ #include <string>
+ #include <algorithm>
+ #include <vector>
++#include <array>
+ #include <fstream>
+ #include <sstream>
++#include <memory>
+ #include <iterator>
+ #include <sys/stat.h>
+ #include <cstdio>
+@@ -164,6 +166,7 @@
+ static std::vector<std::string> blocked_clients;
+ static bool restrict_clients;
+ static bool setup_legacy_pairing = false;
++static bool peer_to_peer = false;
+ static unsigned char pin_pw = 0;  /* 0: no client access control; 1: onscreen pin ; 2: require password (same password for all clients)  3: random pw*/
+ static std::string password = "";
+ static guint min_password_length = MIN_PASSWORD_LENGTH;
+@@ -231,6 +234,25 @@
+ static float previous_hls_position = 0.0f;
+ #endif
+ 
++#if defined(__APPLE__) && defined(UXPLAY_HAVE_APPLE_P2P)
++struct PcloseDeleter {
++    void operator()(FILE *fp) const {
++        if (fp) pclose(fp);
++    }
++};
++
++static std::string exec_command(const char *command) {
++    std::array<char, 128> buffer;
++    std::string result;
++    std::unique_ptr<FILE, PcloseDeleter> pipe(popen(command, "r"));
++    if (!pipe) return result;
++    while (fgets(buffer.data(), buffer.size(), pipe.get()) != NULL) {
++        result += buffer.data();
++    }
++    return result;
++}
++#endif
++
+ /* PATCH (Plan B): true when the engine runs INSIDE the host tray process
+  * (uxplay-core.dll/.dylib/.so) instead of the standalone exe.  Declared up here
+  * with the option statics because everything below has to know: in-process, an
+@@ -322,6 +344,7 @@
+     blocked_clients.clear();
+     restrict_clients = false;
+     setup_legacy_pairing = false;
++    peer_to_peer = false;
+     pin_pw = 0;
+     password = "";
+     min_password_length = MIN_PASSWORD_LENGTH;
+@@ -1114,6 +1137,8 @@
+     printf("-scrsv n  Screensaver override n: 0=off 1=on while displaying video 2=always on\n");
+     printf("-pin[xxxx]Use a 4-digit pin code to control client access (default: no)\n");
+     printf("          default pin is random: optionally use fixed pin xxxx\n");
++    printf("-p2p      Advertise and accept AirPlay over Apple peer-to-peer (macOS only)\n");
++    printf("          uses a one-time pin; makes UxPlay visible to nearby Apple devices\n");
+     printf("-reg [fn] Keep a register in $HOME/.uxplay.register to verify returning\n");
+     printf("          client pin-registration; (option: use file \"fn\" for this)\n");
+     printf("-pw [pwd] Require use of password to control client access;\n");
+@@ -1835,6 +1860,25 @@
+                 }
+                 pin = n + 10000;
+             }
++	} else if (arg == "-p2p") {
++#if defined(__APPLE__) && defined(UXPLAY_HAVE_APPLE_P2P)
++            std::string output = exec_command(
++                "defaults -currentHost read com.apple.controlcenter AirplayReceiverEnabled 2>/dev/null");
++            const std::string::size_type end = output.find_last_not_of(" \n\r\t");
++            output = end == std::string::npos ? "" : output.substr(0, end + 1);
++            if (output == "1" || output == "true") {
++                peer_to_peer = true;
++                setup_legacy_pairing = true;
++                pin_pw = 1;
++                LOGI("AirPlay peer-to-peer enabled over AWDL");
++            } else {
++                LOGE("AIR_SERVER_P2P_REQUIRES_NATIVE_RECEIVER: enable AirPlay Receiver in System Settings > General > AirDrop & Handoff");
++                PARSE_BAIL(1);
++            }
++#else
++            fprintf(stderr, "invalid: -p2p requires macOS with Apple Bonjour\n");
++            PARSE_BAIL(1);
++#endif
+ 	} else if (arg == "-reg") {
+             registration_list = true;
+             pairing_register.erase();
+@@ -2270,6 +2314,10 @@
+         dnssd_set_interface_index(dnssd, bind_ifindex);   /* 0 = advertise everywhere */
+     }
+ 
++#if defined(__APPLE__) && defined(UXPLAY_HAVE_APPLE_P2P)
++    dnssd_set_peer_to_peer(dnssd, (int) peer_to_peer);
++#endif
++
+     /* after dnssd starts, reset the default feature set here 
+      * (overwrites features set in dnssdint.h)
+      * default: FEATURES_1 = 0x5A7FFEE6, FEATURES_2 = 0 */
+@@ -2470,6 +2518,7 @@
+ }
+ 
+ extern "C" void display_pin(void *cls, char *pin) {
++    LOGI("AIR_SERVER_PIN=%s", pin);
+     int margin = 10;
+     int spacing = 3;
+     char *image = create_pin_display(pin, margin, spacing);

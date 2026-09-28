@@ -344,9 +344,16 @@ fn report_engine_start(result: Result<()>, what: &str, cfg: &Config, user_initia
     // in Settings — so name the address instead of making them guess which of
     // their NICs the config points at. `bind_arg` (not the raw field) because a
     // value it rejects was never passed to the engine and cannot be the cause.
-    let body = match net_interfaces::bind_arg(cfg.bind_ip.as_deref()) {
-        Some(ip) => t.err_engine_bind.replace("{ip}", ip),
-        None => t.err_engine_body.to_string(),
+    let body = if crate::status::P2P_SETUP_REQUIRED.load(Ordering::SeqCst) {
+        match i18n::Lang::from_config(&cfg.language) {
+            i18n::Lang::PtBr => "Para usar sem a mesma rede, ative Receptor AirPlay em Ajustes do Sistema → Geral → AirDrop e Handoff; depois abra o Air Server novamente.".to_string(),
+            _ => "To use direct AirPlay without a shared network, enable AirPlay Receiver in System Settings → General → AirDrop & Handoff, then reopen Air Server.".to_string(),
+        }
+    } else {
+        match net_interfaces::bind_arg(cfg.bind_ip.as_deref()) {
+            Some(ip) => t.err_engine_bind.replace("{ip}", ip),
+            None => t.err_engine_body.to_string(),
+        }
     };
     user_notify(t.err_engine_title, &body);
 }

@@ -7,7 +7,7 @@ not reimplement the AirPlay protocol.
 
 ```text
 iPhone
-  | AirPlay / local Wi-Fi
+  | AirPlay / AWDL direct or local Wi-Fi
   v
 patched UxPlay core (C/C++, GPL)
   | flat C ABI + decoded media
@@ -59,8 +59,12 @@ disconnect hides the video window without quitting the app. Closing the video
 window restarts the receiver, which is a deliberate manual recovery path during
 a show.
 
-The selected network adapter can be pinned. If it disappears, the engine logs a
-warning and falls back to all adapters instead of failing silently.
+On macOS the receiver starts in peer-to-peer mode. Bonjour publishes the RAOP
+and AirPlay services with Apple's P2P/AWDL flags, while `SO_RECV_ANYIF` lets the
+listening sockets accept traffic from the peer interface. The host deliberately
+does not apply a saved LAN adapter pin on this path because AWDL is selected
+dynamically by macOS. First contact uses UxPlay legacy pairing and the engine's
+four-digit PIN is forwarded into the native waiting window.
 
 ## Explicit non-goals for the first MVP
 
@@ -68,6 +72,5 @@ warning and falls back to all adapters instead of failing silently.
 - No cloud service or account.
 - No remote control of the iPhone.
 - No automatic update feed until this fork owns signing and release hosting.
-- No claim that AWDL works in this fork yet. Current upstream UxPlay 1.74 has an
-  experimental `-p2p` path, but this app pins Popyachsa's validated 1.73.6-based
-  integration fork. Wi-Fi is the production path for this MVP.
+- No attempt to work with the Wi-Fi radio disabled. AWDL is router-free, not
+  radio-free; Wi-Fi must remain enabled on both devices.
