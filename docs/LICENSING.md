@@ -25,6 +25,7 @@ proprietary/GPL product.
 Unmodified system/runtime dependencies retain their own terms, including:
 
 - GStreamer and GLib: LGPL.
+- Syphon framework: BSD 3-Clause.
 - OpenSSL: Apache-2.0.
 - Rust dependencies: primarily MIT/Apache-2.0.
 - The optional Windows mDNS shim: MIT/public-domain components.

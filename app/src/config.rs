@@ -60,6 +60,9 @@ pub struct Config {
     pub video_resolution: String,
     pub target_fps: u32,
     pub enable_h265: bool,
+    /// Publish the decoded macOS video as a local Syphon source for Resolume.
+    /// The renderer only performs the extra conversion while a client is attached.
+    pub syphon_output: bool,
     /// Hardware video decoder: "d3d11" (DXVA, any GPU), "d3d12" (DXVA, any GPU),
     /// or "nvidia" (NVDEC). D3D11/12 also work on AMD/Intel.
     pub video_decoder: String,
@@ -112,6 +115,7 @@ impl Default for Config {
             video_resolution: "1920x1080".to_string(),
             target_fps: 120,
             enable_h265: true,
+            syphon_output: false,
             // Per-OS sensible defaults; the Settings UI shows OS-appropriate
             // choices and the per-OS engine maps these to GStreamer elements.
             // Windows: d3d11/wasapisink; macOS: VideoToolbox/Core-Audio; Linux &
@@ -273,6 +277,7 @@ mod tests {
         assert_eq!(old.bind_ip, None);
         assert_eq!(old.video_resolution, "1920x1080");
         assert_eq!(old.video_size_arg(), "1920x1080@60");
+        assert!(!old.syphon_output);
     }
 
     #[test]

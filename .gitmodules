@@ -2,3 +2,6 @@
 	path = third_party/uxplay
 	url = https://github.com/Recluse/UxPlay
 	branch = popyachsa-integration
+[submodule "third_party/syphon"]
+	path = third_party/syphon
+	url = https://github.com/Syphon/Syphon-Framework.git

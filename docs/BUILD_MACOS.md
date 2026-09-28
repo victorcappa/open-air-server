@@ -47,9 +47,10 @@ GSTREAMER_FRAMEWORK=/path/to/GStreamer.framework ./scripts/build-macos-arm64.sh
 ./scripts/build-macos-arm64.sh
 ```
 
-The script copies the pinned submodule to `target/uxplay-source/macos`, applies
-the tracked macOS renderer overlay, builds `uxplay-core.dylib` from that prepared
-tree, and then assembles an ad-hoc-signed, self-contained application:
+The script builds the pinned Syphon framework, copies the pinned UxPlay
+submodule to `target/uxplay-source/macos`, applies the tracked macOS renderer
+overlay, builds `uxplay-core.dylib` from that prepared tree, and then assembles
+an ad-hoc-signed, self-contained application:
 
 ```text
 build/macos/dist/Air Server.app
@@ -59,5 +60,5 @@ build/macos/dist/Air Server.app
 
 The packaging script verifies code-signing structure, bundled dependencies and
 architectures. It cannot verify discovery, mirroring, audio, live orientation,
-latency, HDMI placement or OBS capture. Follow `OPERATIONS.md` on the physical
-show kit before release.
+latency, HDMI placement, OBS capture or Resolume acceptance. Follow
+`OPERATIONS.md` on the physical show kit before release.

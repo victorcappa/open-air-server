@@ -19,6 +19,7 @@ VERSION="${VERSION:-$(grep -m1 '^version' "$APPDIR/Cargo.toml" | sed 's/.*"\(.*\
 TARGET="${TARGET:-aarch64-apple-darwin}"
 DYLIB="${DYLIB:-$HOME/uxplay-mac-build/UxPlay/build-arm64/uxplay-core.dylib}"
 FRAMEWORK="${FRAMEWORK:-/Library/Frameworks/GStreamer.framework}"
+SYPHON_FRAMEWORK="${SYPHON_FRAMEWORK:-}"
 GST_LIB="$FRAMEWORK/Versions/1.0/lib"
 GST_PLUGINS="$GST_LIB/gstreamer-1.0"
 GST_SCANNER="$FRAMEWORK/Versions/1.0/libexec/gstreamer-1.0/gst-plugin-scanner"
@@ -83,6 +84,7 @@ PLUGINS=(
 echo "==> Air Server.app  v$VERSION  ($TARGET)"
 [ -f "$DYLIB" ] || { echo "missing dylib: $DYLIB (run build-core-arm64.sh)"; exit 1; }
 [ -d "$FRAMEWORK" ] || { echo "missing $FRAMEWORK (install official GStreamer.framework)"; exit 1; }
+[ -f "$SYPHON_FRAMEWORK/Syphon" ] || { echo "missing SYPHON_FRAMEWORK: $SYPHON_FRAMEWORK"; exit 1; }
 
 # ---- 1. release binary -------------------------------------------------------
 echo "==> cargo build --release"
@@ -135,6 +137,7 @@ fi
 cp "$BIN" "$C/MacOS/open-air-server"
 cp "$DYLIB" "$C/MacOS/uxplay-core.dylib"
 chmod +w "$C/MacOS/uxplay-core.dylib"
+cp -R "$SYPHON_FRAMEWORK" "$C/Frameworks/Syphon.framework"
 
 # CMake may discover GStreamer through Homebrew even when the official framework
 # is the packaging source. Never leave those machine-local absolute paths in the
@@ -233,6 +236,9 @@ while [ ${#queue[@]} -gt 0 ]; do
     case "$dep" in
       @rpath/*)
         db="${dep#@rpath/}"
+        # Syphon is a real framework under Contents/Frameworks, not a flat
+        # GStreamer dylib. It is copied and signed separately below.
+        [ "$db" = "Syphon.framework/Versions/A/Syphon" ] && continue
         [ -f "$DEST_LIB/$db" ] && continue
         if [ -f "$GST_LIB/$db" ]; then cp -p "$GST_LIB/$db" "$DEST_LIB/$db"; chmod +w "$DEST_LIB/$db"; queue+=( "$GST_LIB/$db" )
         else echo "   WARN: @rpath dep $db of $(basename "$src") not in $GST_LIB — NOT bundled"; fi
@@ -250,13 +256,13 @@ if [ -f "$GST_SCANNER" ]; then
 fi
 
 # ---- 4. point uxplay-core.dylib at the bundled libs --------------------------
-# Strip the build-time ABSOLUTE rpath to the system /Library framework, so the
-# bundled libs are the ONLY source — true self-containment (and testable on this
-# Mac, where /Library/Frameworks/GStreamer would otherwise win the search order).
+# Strip every build-time absolute rpath (GStreamer and the locally built Syphon
+# framework), so the bundled libraries are the only source. Leaving the Syphon
+# DerivedData path here would work on this build Mac and silently fail elsewhere.
 rpaths="$(otool -l "$C/MacOS/uxplay-core.dylib" | grep -A2 LC_RPATH | grep ' path ' | awk '{print $2}' || true)"
 while read -r rp; do
   case "$rp" in
-    *GStreamer.framework*|/Library/*|/opt/*)
+    /*)
       install_name_tool -delete_rpath "$rp" "$C/MacOS/uxplay-core.dylib" 2>/dev/null || true ;;
   esac
 done <<< "$rpaths"
@@ -267,6 +273,7 @@ done <<< "$rpaths"
 # breakage. engine_macos::set_bundled_gst_env probes the same two paths.
 install_name_tool -add_rpath "@loader_path/../Resources/GStreamer/lib" "$C/MacOS/uxplay-core.dylib"
 install_name_tool -add_rpath "@loader_path/../Frameworks/GStreamer/lib" "$C/MacOS/uxplay-core.dylib"
+install_name_tool -add_rpath "@loader_path/../Frameworks" "$C/MacOS/uxplay-core.dylib"
 
 # ---- 5. Info.plist (incl. local-network privacy keys for mDNS) ---------------
 ICNS="AppIcon.icns"
@@ -303,6 +310,7 @@ fi
 # ---- 6b. licence (GPL-3 §4: recipients must get a copy of the licence) -------
 [ -f "$COPYING" ] || { echo "missing $COPYING — GPL-3 text must ship with the binaries"; exit 1; }
 cp "$COPYING" "$C/Resources/COPYING"
+cp "$REPO/third_party/syphon/License.txt" "$C/Resources/SYPHON-LICENSE.txt"
 
 # ---- 7. ad-hoc codesign (needed for Apple Silicon to load modified Mach-Os) --
 # NOT Developer ID / notarized — Gatekeeper still requires right-click->Open.
@@ -331,6 +339,7 @@ find "$APP" -name '._*' -delete
 # this predicate meaning what it says.
 find "$APP" -type f \( -perm +111 -o -name '*.dylib' -o -name '*.so' \) ! -path "$C/MacOS/open-air-server" \
   -exec codesign --force --sign - {} +
+codesign --force --sign - "$C/Frameworks/Syphon.framework"
 codesign --force --sign - "$APP"
 codesign --verify --strict "$APP"
 echo "   sealed ok"

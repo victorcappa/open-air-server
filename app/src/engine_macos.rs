@@ -544,6 +544,13 @@ impl Engine {
     /// engine worker and returns (no join here), so the main thread never blocks.
     fn start_inner(&self, cfg: &Config) -> anyhow::Result<()> {
         set_bundled_gst_env(); // before the dylib's gst_init (no-op for `cargo run`)
+                               // Read by avsample_sink.m when the stream creates its renderer. Keeping
+                               // this out of UxPlay's public option parser makes Syphon a host feature,
+                               // and the config watcher restarts the engine when the value changes.
+        std::env::set_var(
+            "AIR_SERVER_SYPHON_OUTPUT",
+            if cfg.syphon_output { "1" } else { "0" },
+        );
         let mut inner = self.inner.borrow_mut();
         if inner.nsview == 0 {
             anyhow::bail!("mirror window not attached yet (attach_window must run first)");

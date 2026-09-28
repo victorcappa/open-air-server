@@ -1171,6 +1171,7 @@ fn main() -> Result<()> {
                                 || old.video_resolution != new_cfg.video_resolution
                                 || old.target_fps != new_cfg.target_fps
                                 || old.enable_h265 != new_cfg.enable_h265
+                                || old.syphon_output != new_cfg.syphon_output
                                 || old.video_decoder != new_cfg.video_decoder
                                 || old.audio_sink != new_cfg.audio_sink
                                 || old.debug_logging != new_cfg.debug_logging

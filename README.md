@@ -15,7 +15,7 @@ AirPlay from scratch.
 The ready-to-use Apple Silicon build is on the
 [latest GitHub release](https://github.com/victorcappa/open-air-server/releases/latest).
 
-1. Download `Air-Server-0.2.20.dmg`.
+1. Download `Air-Server-0.2.21.dmg`.
 2. Open the DMG and drag **Air Server** to **Applications**.
 3. On the first launch, Control-click **Air Server**, choose **Open**, then
    confirm. The current community build is ad-hoc signed and not Apple-notarized.
@@ -46,6 +46,8 @@ The published macOS build currently requires Apple Silicon and macOS 11 or newer
   window. No router or shared Wi-Fi network is required.
 - The receiver window has a stable title for OBS Window Capture; capture on the
   target OBS/macOS installation is still a rehearsal gate.
+- Optional native Syphon output appears as **Air Server — iPhone** under
+  Resolume's Sources tab, while the independent mirror window remains available.
 - Local config and logs under `~/Library/Application Support/OpenAirServer`.
 - No account, cloud dependency, telemetry or automatic updater.
 
@@ -56,7 +58,7 @@ running from the menu bar.
 ## Network requirements
 
 Internet access, a router and a shared Wi-Fi network are not required. Air Server
-0.2.20 advertises through macOS AWDL so a nearby iPhone can connect directly.
+0.2.21 advertises through macOS AWDL so a nearby iPhone can connect directly.
 Keep Wi-Fi enabled on both devices even if neither is joined to a network, and
 enable **AirPlay Receiver** under System Settings → General → AirDrop & Handoff.
 The first direct connection asks for the four-digit PIN shown by Air Server.
@@ -66,7 +68,8 @@ A shared LAN remains a useful rehearsed fallback. See
 
 ## Build on Apple Silicon
 
-The repository pins the exact UxPlay integration fork as a Git submodule.
+The repository pins the exact UxPlay integration fork and the Syphon framework
+as Git submodules.
 
 ```bash
 git clone --recurse-submodules https://github.com/victorcappa/open-air-server.git

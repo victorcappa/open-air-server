@@ -34,7 +34,7 @@ check_command() {
   fi
 }
 
-for tool in clang cargo rustc cmake ninja pkg-config; do
+for tool in clang cargo rustc cmake ninja pkg-config xcodebuild; do
   check_command "$tool"
 done
 
@@ -42,6 +42,13 @@ if [ -f "$repo_dir/third_party/uxplay/lib/airplay_core.cpp" ]; then
   echo "ok   UxPlay integration submodule"
 else
   echo "MISS third_party/uxplay (run: git submodule update --init --recursive)" >&2
+  failed=1
+fi
+
+if [ -f "$repo_dir/third_party/syphon/SyphonSubclassing.h" ]; then
+  echo "ok   Syphon framework submodule"
+else
+  echo "MISS third_party/syphon (run: git submodule update --init --recursive)" >&2
   failed=1
 fi
 

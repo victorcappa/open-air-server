@@ -20,5 +20,7 @@ patch --silent --forward -d "$prepared_src" -p1 \
   < "$repo_dir/uxplay-patches/low-latency-macos.diff"
 patch --silent --forward -d "$prepared_src" -p1 \
   < "$repo_dir/uxplay-patches/awdl-p2p-macos.diff"
+patch --silent --forward -d "$prepared_src" -p1 \
+  < "$repo_dir/uxplay-patches/syphon-output-macos.diff"
 
 echo "$prepared_src"

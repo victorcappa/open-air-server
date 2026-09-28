@@ -388,6 +388,8 @@ impl eframe::App for SettingsApp {
                     });
 
                     self.section(ui, t.sec_video, |ui, edited| {
+                        let portuguese = crate::i18n::Lang::from_config(&edited.language)
+                            == crate::i18n::Lang::PtBr;
                         checkbox_row(ui, &mut edited.fullscreen,
                                      t.lbl_fullscreen,
                                      t.help_fullscreen);
@@ -401,8 +403,21 @@ impl eframe::App for SettingsApp {
                         checkbox_row(ui, &mut edited.borderless,
                                      t.lbl_borderless,
                                      t.help_borderless);
-                        let portuguese = crate::i18n::Lang::from_config(&edited.language)
-                            == crate::i18n::Lang::PtBr;
+                        #[cfg(target_os = "macos")]
+                        checkbox_row(
+                            ui,
+                            &mut edited.syphon_output,
+                            if portuguese {
+                                "Saída para Resolume (Syphon)"
+                            } else {
+                                "Resolume output (Syphon)"
+                            },
+                            if portuguese {
+                                "Publica o espelhamento como Air Server — iPhone em Sources → Syphon no Resolume. A janela continua disponível."
+                            } else {
+                                "Publishes the mirror as Air Server — iPhone under Sources → Syphon in Resolume. The window remains available."
+                            },
+                        );
                         labelled_row(
                             ui,
                             if portuguese { "Resolução" } else { "Resolution" },

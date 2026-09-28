@@ -18,7 +18,13 @@ SRC="${SRC:-$HOME/uxplay-mac-build/UxPlay}"
 ARCH="${ARCH:-arm64}"
 BUILD="${BUILD:-$SRC/build-$ARCH}"
 FRAMEWORK="${FRAMEWORK:-/Library/Frameworks/GStreamer.framework}"
+SYPHON_FRAMEWORK="${SYPHON_FRAMEWORK:-}"
 GSTPC="$FRAMEWORK/Versions/1.0/lib/pkgconfig"
+
+[ -n "$SYPHON_FRAMEWORK" ] && [ -f "$SYPHON_FRAMEWORK/Syphon" ] || {
+  echo "missing SYPHON_FRAMEWORK (build build/macos/build-syphon-arm64.sh first)" >&2
+  exit 1
+}
 
 export PKG_CONFIG_PATH="$GSTPC:/opt/homebrew/lib/pkgconfig:/opt/homebrew/opt/openssl@3/lib/pkgconfig"
 echo "PKG_CONFIG_PATH=$PKG_CONFIG_PATH"
@@ -29,6 +35,7 @@ cmake -S "$SRC" -B "$BUILD" -G Ninja \
   -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
   -DCMAKE_OSX_ARCHITECTURES="$ARCH" \
   -DGST_MACOS=OFF \
+  -DSYPHON_FRAMEWORK_DIR="$SYPHON_FRAMEWORK" \
   -DNO_MARCH_NATIVE=ON \
   -DPKG_CONFIG_EXECUTABLE=/opt/homebrew/bin/pkg-config
 

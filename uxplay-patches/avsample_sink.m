@@ -10,10 +10,18 @@
 // Compiled as Objective-C (ARC) into the `renderers` lib; exposed to the C TU
 // video_renderer.c via the small C ABI below.
 
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
 #import <AVFoundation/AVFoundation.h>
 #import <AppKit/AppKit.h>
 #import <CoreVideo/CoreVideo.h>
 #import <CoreMedia/CoreMedia.h>
+#ifdef AIR_SERVER_HAVE_SYPHON
+#import <CoreImage/CoreImage.h>
+#import <Syphon/SyphonSubclassing.h>
+#endif
 
 // --- C ABI (called from video_renderer.c) -------------------------------------
 void *avlayer_sink_create(void *nsview_ptr);
@@ -21,6 +29,89 @@ void  avlayer_sink_enqueue_nv12(void *sink, const unsigned char *y, unsigned lon
                                 const unsigned char *uv, unsigned long uv_stride,
                                 int width, int height);
 void  avlayer_sink_destroy(void *sink);
+
+#ifdef AIR_SERVER_HAVE_SYPHON
+// SyphonServerBase exposes an IOSurface-backed BGRA frame to local clients.
+// Core Image converts the existing NV12 CVPixelBuffer directly into that
+// surface on the GPU, so the AirPlay frame never makes another CPU round-trip.
+@interface AirServerSyphonServer : SyphonServerBase
+@property(nonatomic, strong) CIContext *airServerContext;
+@property(nonatomic, assign) CGColorSpaceRef airServerColorSpace;
+- (void)publishPixelBuffer:(CVPixelBufferRef)pixelBuffer;
+@end
+
+@implementation AirServerSyphonServer
+- (instancetype)initWithName:(NSString *)name {
+    self = [super initWithName:name options:nil];
+    if (self) {
+        _airServerContext = [CIContext contextWithOptions:@{
+            kCIContextUseSoftwareRenderer : @NO
+        }];
+        _airServerColorSpace = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
+    }
+    return self;
+}
+
+- (void)dealloc {
+    if (_airServerColorSpace) CGColorSpaceRelease(_airServerColorSpace);
+}
+
+- (void)publishPixelBuffer:(CVPixelBufferRef)pixelBuffer {
+    if (!pixelBuffer || !self.hasClients) return;
+    const size_t width = CVPixelBufferGetWidth(pixelBuffer);
+    const size_t height = CVPixelBufferGetHeight(pixelBuffer);
+    IOSurfaceRef surface = [self newSurfaceForWidth:width height:height options:nil];
+    if (!surface) return;
+
+    CIImage *image = [CIImage imageWithCVPixelBuffer:pixelBuffer];
+    [self.airServerContext render:image
+                       toIOSurface:surface
+                            bounds:CGRectMake(0, 0, width, height)
+                        colorSpace:self.airServerColorSpace];
+    [self publish];
+    CFRelease(surface);
+}
+@end
+
+// UxPlay prepares one appsink for H.264 and another for H.265. Both must feed
+// the same publisher: creating one server per sink would show two indistinguish-
+// able sources in Resolume before either codec has even received a frame.
+static AirServerSyphonServer *airServerSharedSyphonServer = nil;
+static NSUInteger airServerSharedSyphonReferences = 0;
+
+static void *airserver_syphon_acquire(void) {
+    @synchronized([AirServerSyphonServer class]) {
+        if (!airServerSharedSyphonServer) {
+            airServerSharedSyphonServer =
+                [[AirServerSyphonServer alloc] initWithName:@"Air Server — iPhone"];
+            if (airServerSharedSyphonServer) {
+                fprintf(stderr, "[syphon] publishing as Air Server — iPhone\n");
+            } else {
+                fprintf(stderr, "[syphon] failed to create server\n");
+                return NULL;
+            }
+        }
+        airServerSharedSyphonReferences++;
+        return (__bridge_retained void *)airServerSharedSyphonServer;
+    }
+}
+
+static void airserver_syphon_release(void *server_ref) {
+    if (!server_ref) return;
+    AirServerSyphonServer *server =
+        (__bridge_transfer AirServerSyphonServer *)server_ref;
+    @synchronized([AirServerSyphonServer class]) {
+        if (airServerSharedSyphonReferences > 0) {
+            airServerSharedSyphonReferences--;
+        }
+        if (airServerSharedSyphonReferences == 0 &&
+            airServerSharedSyphonServer == server) {
+            [airServerSharedSyphonServer stop];
+            airServerSharedSyphonServer = nil;
+        }
+    }
+}
+#endif
 
 typedef struct AVLayerSink {
     // CFBridgingRetain'd AVSampleBufferDisplayLayer. _Atomic because create()
@@ -34,6 +125,11 @@ typedef struct AVLayerSink {
     CMVideoFormatDescriptionRef format;
     int width;
     int height;
+#ifdef AIR_SERVER_HAVE_SYPHON
+    // CFBridgingRetain'd AirServerSyphonServer, present only when enabled in
+    // Settings for this engine run.
+    void *syphon_server;
+#endif
 } AVLayerSink;
 
 static bool avlayer_sink_prepare_pool(AVLayerSink *s, int width, int height) {
@@ -60,6 +156,7 @@ static bool avlayer_sink_prepare_pool(AVLayerSink *s, int width, int height) {
             (id)kCVPixelBufferPixelFormatTypeKey : @(kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange),
             (id)kCVPixelBufferWidthKey : @(width),
             (id)kCVPixelBufferHeightKey : @(height),
+            (id)kCVPixelBufferMetalCompatibilityKey : @YES,
             (id)kCVPixelBufferIOSurfacePropertiesKey : @{}
         };
         if (CVPixelBufferPoolCreate(kCFAllocatorDefault,
@@ -103,6 +200,12 @@ void *avlayer_sink_create(void *nsview_ptr) {
     if (!nsview_ptr) return NULL;
     AVLayerSink *s = (AVLayerSink *)calloc(1, sizeof(AVLayerSink));
     if (!s) return NULL;
+#ifdef AIR_SERVER_HAVE_SYPHON
+    const char *syphon_enabled = getenv("AIR_SERVER_SYPHON_OUTPUT");
+    if (syphon_enabled && strcmp(syphon_enabled, "1") == 0) {
+        s->syphon_server = airserver_syphon_acquire();
+    }
+#endif
     NSView *view = (__bridge NSView *)nsview_ptr;
     void (^build)(void) = ^{
         AVSampleBufferDisplayLayer *layer = [[AVSampleBufferDisplayLayer alloc] init];
@@ -180,6 +283,13 @@ void avlayer_sink_enqueue_nv12(void *sink_, const unsigned char *y, unsigned lon
         [layer enqueueSampleBuffer:sb];
         CFRelease(sb);
     }
+#ifdef AIR_SERVER_HAVE_SYPHON
+    if (s->syphon_server) {
+        AirServerSyphonServer *server =
+            (__bridge AirServerSyphonServer *)s->syphon_server;
+        [server publishPixelBuffer:pb];
+    }
+#endif
     CVPixelBufferRelease(pb);
 }
 
@@ -215,6 +325,13 @@ void avlayer_sink_destroy(void *sink_) {
         }
         if (s->format) CFRelease(s->format);
         if (s->pool) CVPixelBufferPoolRelease(s->pool);
+#ifdef AIR_SERVER_HAVE_SYPHON
+        if (s->syphon_server) {
+            void *server_ref = s->syphon_server;
+            s->syphon_server = NULL;
+            airserver_syphon_release(server_ref);
+        }
+#endif
         free(s);
     };
     if ([NSThread isMainThread]) {

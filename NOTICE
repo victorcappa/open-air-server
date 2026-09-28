@@ -33,6 +33,10 @@ Media pipeline (dynamically linked / bundled as-is, not modified)
   GStreamer — https://gstreamer.freedesktop.org — LGPL-2.1
   GLib      — https://gitlab.gnome.org/GNOME/glib — LGPL-2.1
 
+Local real-time texture sharing
+  Syphon — https://github.com/Syphon/Syphon-Framework — BSD 3-Clause
+    The unmodified pinned framework is bundled for the optional Resolume output.
+
 Cryptography (pulled in by the engine)
   OpenSSL   — https://www.openssl.org — Apache-2.0
 

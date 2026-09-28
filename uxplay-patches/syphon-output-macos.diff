@@ -1,0 +1,20 @@
+diff --git a/renderers/CMakeLists.txt b/renderers/CMakeLists.txt
+index 52188fa..7fce878 100644
+--- a/renderers/CMakeLists.txt
++++ b/renderers/CMakeLists.txt
+@@ -101,5 +101,15 @@ if( APPLE )
+   # +1 from [alloc init] is never given back and every session leaks a layer.
+   set_source_files_properties( avsample_sink.m PROPERTIES COMPILE_OPTIONS "-fobjc-arc" )
++  if( SYPHON_FRAMEWORK_DIR )
++    if( NOT EXISTS "${SYPHON_FRAMEWORK_DIR}/Syphon" )
++      message( FATAL_ERROR "Syphon framework not found at ${SYPHON_FRAMEWORK_DIR}" )
++    endif()
++    target_compile_definitions( renderers PRIVATE AIR_SERVER_HAVE_SYPHON=1 )
++    target_include_directories( renderers PRIVATE "${SYPHON_FRAMEWORK_DIR}/Headers" )
++    target_link_libraries( renderers PUBLIC
++                           "${SYPHON_FRAMEWORK_DIR}/Syphon"
++                           "-framework CoreImage" )
++  endif()
+   target_link_libraries( renderers PUBLIC objc
+                          "-framework CoreGraphics"
+                          "-framework Foundation"
