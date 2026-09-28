@@ -15,7 +15,7 @@ AirPlay from scratch.
 The ready-to-use Apple Silicon build is on the
 [latest GitHub release](https://github.com/victorcappa/open-air-server/releases/latest).
 
-1. Download `Air-Server-0.2.19.dmg`.
+1. Download `Air-Server-0.2.20.dmg`.
 2. Open the DMG and drag **Air Server** to **Applications**.
 3. On the first launch, Control-click **Air Server**, choose **Open**, then
    confirm. The current community build is ad-hoc signed and not Apple-notarized.
@@ -56,7 +56,7 @@ running from the menu bar.
 ## Network requirements
 
 Internet access, a router and a shared Wi-Fi network are not required. Air Server
-0.2.18 advertises through macOS AWDL so a nearby iPhone can connect directly.
+0.2.20 advertises through macOS AWDL so a nearby iPhone can connect directly.
 Keep Wi-Fi enabled on both devices even if neither is joined to a network, and
 enable **AirPlay Receiver** under System Settings → General → AirDrop & Handoff.
 The first direct connection asks for the four-digit PIN shown by Air Server.

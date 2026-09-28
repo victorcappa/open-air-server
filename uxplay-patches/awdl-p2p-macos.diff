@@ -225,7 +225,7 @@ diff --git a/uxplay.cpp b/uxplay.cpp
      printf("-reg [fn] Keep a register in $HOME/.uxplay.register to verify returning\n");
      printf("          client pin-registration; (option: use file \"fn\" for this)\n");
      printf("-pw [pwd] Require use of password to control client access;\n");
-@@ -1835,6 +1860,25 @@
+@@ -1835,6 +1860,36 @@
                  }
                  pin = n + 10000;
              }
@@ -235,7 +235,18 @@ diff --git a/uxplay.cpp b/uxplay.cpp
 +                "defaults -currentHost read com.apple.controlcenter AirplayReceiverEnabled 2>/dev/null");
 +            const std::string::size_type end = output.find_last_not_of(" \n\r\t");
 +            output = end == std::string::npos ? "" : output.substr(0, end + 1);
-+            if (output == "1" || output == "true") {
++            bool native_receiver_enabled = output == "1" || output == "true";
++            if (output.empty()) {
++                output = exec_command(
++                    "defaults -currentHost read com.apple.controlcenter AirplayReceiverAdvertising 2>/dev/null");
++                const std::string::size_type advertising_end = output.find_last_not_of(" \n\r\t");
++                output = advertising_end == std::string::npos ? "" : output.substr(0, advertising_end + 1);
++                native_receiver_enabled = output == "1" || output == "2" || output == "3";
++                if (native_receiver_enabled) {
++                    LOGI("AirPlay Receiver enabled (macOS advertising policy %s)", output.c_str());
++                }
++            }
++            if (native_receiver_enabled) {
 +                peer_to_peer = true;
 +                setup_legacy_pairing = true;
 +                pin_pw = 1;

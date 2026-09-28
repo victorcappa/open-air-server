@@ -275,17 +275,52 @@ fn acquire_tray_single_instance() -> bool {
     true
 }
 
-fn open_settings_window(children: &Arc<Mutex<Vec<std::process::Child>>>) -> Result<()> {
+fn open_settings_window(
+    children: &Arc<Mutex<Vec<std::process::Child>>>,
+    active_settings_pid: &Arc<Mutex<Option<u32>>>,
+) -> Result<()> {
+    prune_dead_children(children);
+
+    // Reopening the bundle while Settings is already alive should focus the
+    // existing window, not leave a trail of duplicate dialogs.
+    let mut tracked_pid = active_settings_pid
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    if let Some(pid) = *tracked_pid {
+        let is_running = children
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .iter()
+            .any(|child| child.id() == pid);
+        if is_running {
+            #[cfg(target_os = "macos")]
+            activate_process(pid);
+            return Ok(());
+        }
+        *tracked_pid = None;
+    }
+
     // Re-launch ourselves with `--settings` in a separate process; that child
     // owns the eframe event loop, edits the config, writes it back, exits.
     let exe = std::env::current_exe()?;
     let child = std::process::Command::new(&exe).arg("--settings").spawn()?;
+    *tracked_pid = Some(child.id());
     children
         .lock()
         .unwrap_or_else(|e| e.into_inner())
         .push(child);
-    prune_dead_children(children);
     Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn activate_process(pid: u32) {
+    use objc2_app_kit::{NSApplicationActivationOptions, NSRunningApplication};
+
+    if let Some(app) =
+        NSRunningApplication::runningApplicationWithProcessIdentifier(pid as libc::pid_t)
+    {
+        let _ = app.activateWithOptions(NSApplicationActivationOptions::ActivateAllWindows);
+    }
 }
 
 /// Re-read config.json for a Start/Restart, keeping the last-known-good copy if
@@ -754,6 +789,7 @@ fn main() -> Result<()> {
 
     // Child handles for the spawned Settings / About sub-windows.
     let sub_windows: Arc<Mutex<Vec<std::process::Child>>> = Arc::new(Mutex::new(Vec::new()));
+    let active_settings_pid: Arc<Mutex<Option<u32>>> = Arc::new(Mutex::new(None));
 
     // Cross-thread channel for forwarded muda/tray/config events.
     let (tx, rx) = mpsc::channel::<AppEvent>();
@@ -952,6 +988,23 @@ fn main() -> Result<()> {
                         eprintln!("[air-server] FAILED to build tray icon: {e}");
                     }
                 }
+
+                // This is a menu-bar application, so launching its bundle would
+                // otherwise appear to do nothing. Put the user-facing Settings
+                // window in front on every fresh interactive launch.
+                #[cfg(target_os = "macos")]
+                if let Err(e) = open_settings_window(&sub_windows, &active_settings_pid) {
+                    eprintln!("[settings] failed to open on launch: {e}");
+                }
+            }
+            // Finder/Dock sends Reopen when the bundle is launched again while
+            // the menu-bar process is already alive. Mirror normal Mac app
+            // behaviour by opening Settings again instead of silently ignoring it.
+            #[cfg(target_os = "macos")]
+            Event::Reopen { .. } => {
+                if let Err(e) = open_settings_window(&sub_windows, &active_settings_pid) {
+                    eprintln!("[settings] failed to open on app reopen: {e}");
+                }
             }
             Event::UserEvent(app_ev) => {
                 let (Some(tray), Some(ids_ref)) = (tray_icon.as_ref(), ids.as_mut()) else {
@@ -1056,7 +1109,7 @@ fn main() -> Result<()> {
                                                 "[engine] restart", &new_cfg, true);
                             current_status = if engine.is_running() { Status::Ready } else { Status::Off };
                         } else if id == &ids_ref.settings {
-                            if let Err(e) = open_settings_window(&sub_windows) {
+                            if let Err(e) = open_settings_window(&sub_windows, &active_settings_pid) {
                                 eprintln!("[settings] {e}");
                             }
                         } else if id == &ids_ref.open_logs {
