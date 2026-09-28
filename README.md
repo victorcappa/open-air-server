@@ -32,6 +32,8 @@ The published macOS build currently requires Apple Silicon and macOS 11 or newer
   background supplied by the video layer.
 - VideoToolbox hardware decoding, H.264/H.265 selection and live portrait /
   landscape rotation.
+- Low-latency macOS path: 1080p60 sender request, one-frame decoded queue and
+  reusable IOSurface-backed display buffers.
 - Tray states for off, ready and connected, plus start, stop, restart and logs.
 - Always-on-top, borderless chrome and borderless fullscreen.
 - macOS display discovery and a preferred-display selector. Selecting the HDMI

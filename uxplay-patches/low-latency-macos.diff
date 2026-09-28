@@ -1,0 +1,21 @@
+diff --git a/renderers/video_renderer.c b/renderers/video_renderer.c
+index 288dd53..a502996 100644
+--- a/renderers/video_renderer.c
++++ b/renderers/video_renderer.c
+@@ -562,12 +562,13 @@ void video_renderer_init(logger_t *render_logger, const char *server_name, video
+ #ifdef __APPLE__
+                 /* PATCH (Plan B): "avlayer" -> custom AVSampleBufferDisplayLayer sink.
+                  * We force NV12 into an appsink and pump frames to our own layer
+-                 * (see avlayer_on_new_sample / avsample_sink.m).  drop=true +
+-                 * max-buffers keep latency flat; sync=false renders ASAP. */
++                 * (see avlayer_on_new_sample / avsample_sink.m).  A single
++                 * decoded-frame slot prevents a slow display from building a
++                 * visible backlog; sync=false renders the newest frame ASAP. */
+                 if (!strcmp(videosink, "avlayer") && !jpeg_pipeline) {
+                     g_string_append(launch, "videoconvert ! video/x-raw,format=NV12 ! appsink name=avlayer_");
+                     g_string_append(launch, renderer_type[i]->codec);
+-                    g_string_append(launch, " emit-signals=false sync=false max-buffers=3 drop=true");
++                    g_string_append(launch, " emit-signals=false sync=false max-buffers=1 drop=true enable-last-sample=false wait-on-eos=false");
+                     vsync_prop = false;
+                 } else {
+ #endif

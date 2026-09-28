@@ -27,7 +27,68 @@ typedef struct AVLayerSink {
     // publishes it from the main queue while the GStreamer streaming thread is
     // already calling enqueue().
     _Atomic(void *) layer;
+    // Reused across frames of the same dimensions. The previous path allocated
+    // a fresh IOSurface-backed pixel buffer and format description for every
+    // frame, adding avoidable work to the latency-critical streaming thread.
+    CVPixelBufferPoolRef pool;
+    CMVideoFormatDescriptionRef format;
+    int width;
+    int height;
 } AVLayerSink;
+
+static bool avlayer_sink_prepare_pool(AVLayerSink *s, int width, int height) {
+    if (s->pool && s->format && s->width == width && s->height == height) {
+        return true;
+    }
+
+    if (s->format) {
+        CFRelease(s->format);
+        s->format = NULL;
+    }
+    if (s->pool) {
+        CVPixelBufferPoolRelease(s->pool);
+        s->pool = NULL;
+    }
+    s->width = 0;
+    s->height = 0;
+
+    @autoreleasepool {
+        NSDictionary *poolAttrs = @{
+            (id)kCVPixelBufferPoolMinimumBufferCountKey : @3
+        };
+        NSDictionary *pixelAttrs = @{
+            (id)kCVPixelBufferPixelFormatTypeKey : @(kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange),
+            (id)kCVPixelBufferWidthKey : @(width),
+            (id)kCVPixelBufferHeightKey : @(height),
+            (id)kCVPixelBufferIOSurfacePropertiesKey : @{}
+        };
+        if (CVPixelBufferPoolCreate(kCFAllocatorDefault,
+                                    (__bridge CFDictionaryRef)poolAttrs,
+                                    (__bridge CFDictionaryRef)pixelAttrs,
+                                    &s->pool) != kCVReturnSuccess || !s->pool) {
+            return false;
+        }
+    }
+
+    CVPixelBufferRef prototype = NULL;
+    if (CVPixelBufferPoolCreatePixelBuffer(kCFAllocatorDefault, s->pool, &prototype) != kCVReturnSuccess || !prototype) {
+        CVPixelBufferPoolRelease(s->pool);
+        s->pool = NULL;
+        return false;
+    }
+    OSStatus status = CMVideoFormatDescriptionCreateForImageBuffer(
+        kCFAllocatorDefault, prototype, &s->format);
+    CVPixelBufferRelease(prototype);
+    if (status != noErr || !s->format) {
+        CVPixelBufferPoolRelease(s->pool);
+        s->pool = NULL;
+        return false;
+    }
+
+    s->width = width;
+    s->height = height;
+    return true;
+}
 
 /// Create the display layer and host it in `nsview` (AppKit work on the main thread).
 ///
@@ -79,17 +140,12 @@ void avlayer_sink_enqueue_nv12(void *sink_, const unsigned char *y, unsigned lon
         [layer flush];
     }
 
+    bool dimensions_changed = s->width != width || s->height != height;
+    if (!avlayer_sink_prepare_pool(s, width, height)) return;
+    if (dimensions_changed) [layer flush];
+
     CVPixelBufferRef pb = NULL;
-    CVReturn rc;
-    // The caller is a GStreamer streaming thread, which has no autorelease pool of
-    // its own: an autoreleased literal there is held until the thread dies. Only
-    // this dictionary is autorelease-prone, so scope a pool around just it.
-    @autoreleasepool {
-        NSDictionary *attrs = @{ (id)kCVPixelBufferIOSurfacePropertiesKey : @{} };
-        rc = CVPixelBufferCreate(kCFAllocatorDefault, width, height,
-                                 kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange,
-                                 (__bridge CFDictionaryRef)attrs, &pb);
-    }
+    CVReturn rc = CVPixelBufferPoolCreatePixelBuffer(kCFAllocatorDefault, s->pool, &pb);
     if (rc != kCVReturnSuccess || !pb) return;
 
     if (CVPixelBufferLockBaseAddress(pb, 0) != kCVReturnSuccess) {
@@ -108,25 +164,22 @@ void avlayer_sink_enqueue_nv12(void *sink_, const unsigned char *y, unsigned lon
     }
     CVPixelBufferUnlockBaseAddress(pb, 0);
 
-    CMVideoFormatDescriptionRef fmt = NULL;
-    if (CMVideoFormatDescriptionCreateForImageBuffer(kCFAllocatorDefault, pb, &fmt) != noErr || !fmt) {
-        CVPixelBufferRelease(pb);
-        return;
-    }
-
     CMSampleTimingInfo timing = { kCMTimeInvalid, kCMTimeInvalid, kCMTimeInvalid };
     CMSampleBufferRef sb = NULL;
-    OSStatus st = CMSampleBufferCreateReadyWithImageBuffer(kCFAllocatorDefault, pb, fmt, &timing, &sb);
+    OSStatus st = CMSampleBufferCreateReadyWithImageBuffer(kCFAllocatorDefault, pb, s->format, &timing, &sb);
     if (st == noErr && sb) {
         CFArrayRef atts = CMSampleBufferGetSampleAttachmentsArray(sb, true);
         if (atts && CFArrayGetCount(atts) > 0) {
             CFMutableDictionaryRef d = (CFMutableDictionaryRef)CFArrayGetValueAtIndex(atts, 0);
             CFDictionarySetValue(d, kCMSampleAttachmentKey_DisplayImmediately, kCFBooleanTrue);
         }
+        // AVSampleBufferDisplayLayer may queue faster than the display can
+        // consume. Flush that stale queue under pressure, then show the newest
+        // frame instead of allowing delay to grow over time.
+        if (!layer.readyForMoreMediaData) [layer flush];
         [layer enqueueSampleBuffer:sb];
         CFRelease(sb);
     }
-    CFRelease(fmt);
     CVPixelBufferRelease(pb);
 }
 
@@ -160,6 +213,8 @@ void avlayer_sink_destroy(void *sink_) {
             [layer flush];
             [layer removeFromSuperlayer];
         }
+        if (s->format) CFRelease(s->format);
+        if (s->pool) CVPixelBufferPoolRelease(s->pool);
         free(s);
     };
     if ([NSThread isMainThread]) {

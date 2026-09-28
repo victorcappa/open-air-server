@@ -27,7 +27,10 @@ reconnection in the upstream engine while the host owns window behavior.
 The Rust host creates a hidden `tao` window and passes its `NSView` to
 `uxplay-core.dylib`. The engine decodes through GStreamer and VideoToolbox. A
 custom `AVSampleBufferDisplayLayer` sink renders into the supplied view and
-preserves aspect ratio while the host retains normal macOS focus and input.
+preserves aspect ratio while the host retains normal macOS focus and input. The
+macOS path requests 1080p60 from the sender, retains at most one decoded frame,
+reuses a `CVPixelBufferPool`, and flushes stale display work under backpressure.
+This keeps delay bounded instead of allowing a queue to grow during a slow frame.
 
 The engine reports connection, teardown and incoming dimensions through its log
 callback. The host uses those events to show or hide the mirror and to resize it

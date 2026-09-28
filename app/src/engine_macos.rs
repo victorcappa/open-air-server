@@ -189,8 +189,10 @@ fn set_bundled_gst_env() {
 }
 
 /// Build the UxPlay option tail for macOS (device name goes via set_device_name).
-/// glimagesink renders into our NSView; VideoToolbox decode; `-vsync no` avoids
-/// macOS timestamp frame-drops; `-nc` is the macOS no-close default.
+/// The sender is explicitly capped at 1080p60: UxPlay otherwise advertises 4K
+/// whenever H.265 is enabled, which adds encoder, network, conversion and copy
+/// pressure without helping the usual projector/window output. VideoToolbox
+/// decodes in hardware; `-vsync no` and the custom avlayer sink render ASAP.
 fn build_options(cfg: &Config) -> String {
     let mut a: Vec<String> = Vec::new();
     if cfg.debug_logging {
@@ -201,6 +203,7 @@ fn build_options(cfg: &Config) -> String {
             .iter()
             .map(|s| s.to_string()),
     );
+    a.extend(["-s".into(), "1920x1080@60".into()]);
     a.extend(["-fps".into(), cfg.target_fps.to_string()]);
     a.extend(["-vsync".into(), "no".into()]);
     if cfg.enable_h265 {
@@ -230,7 +233,9 @@ fn build_options(cfg: &Config) -> String {
         other => other,
     };
     a.extend(["-as".into(), asink.to_string()]);
-    a.push("-FPSdata".into());
+    // Do not request the iPhone's periodic performance plist in production.
+    // UxPlay writes the full report through the streaming log callback; that is
+    // useful while profiling but adds recurring parsing, callback and disk I/O.
     // Bind + advertise on ONE adapter (fork-only `-bind`). Omitted when unset so
     // the argv tail stays byte-identical to what shipped before this setting
     // existed. custom_flags stays last, so a hand-typed -bind there still wins.
@@ -243,6 +248,27 @@ fn build_options(cfg: &Config) -> String {
         }
     }
     a.join(" ")
+}
+
+#[cfg(test)]
+mod option_tests {
+    use super::build_options;
+    use crate::config::Config;
+
+    #[test]
+    fn requests_bounded_1080p60_before_user_overrides() {
+        let mut cfg = Config::default();
+        cfg.custom_flags = "-s 1280x720@60".to_string();
+        let options = build_options(&cfg);
+
+        let default_pos = options.find("-s 1920x1080@60").unwrap();
+        let override_pos = options.rfind("-s 1280x720@60").unwrap();
+        assert!(default_pos < override_pos);
+        assert!(options.contains("-vsync no"));
+        assert!(options.contains("-vd vtdec"));
+        assert!(options.contains("-vs avlayer"));
+        assert!(!options.contains("-FPSdata"));
+    }
 }
 
 /// Parse the leading "WxH" of an UxPlay "begin video stream wxh = WxH; ..." tail.

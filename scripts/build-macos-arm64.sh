@@ -2,12 +2,13 @@
 set -euo pipefail
 
 repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-uxplay_src="$repo_dir/third_party/uxplay"
-core_build="$repo_dir/target/uxplay-core/arm64"
+uxplay_src="$repo_dir/target/uxplay-source/macos"
+core_build="$repo_dir/target/uxplay-core/macos-arm64"
 core_dylib="$core_build/uxplay-core.dylib"
 gst_framework="${GSTREAMER_FRAMEWORK:-/Library/Frameworks/GStreamer.framework}"
 
 GSTREAMER_FRAMEWORK="$gst_framework" "$repo_dir/scripts/doctor-macos.sh"
+UXPLAY_PREPARED_SOURCE="$uxplay_src" "$repo_dir/scripts/prepare-uxplay-macos-source.sh" >/dev/null
 
 echo "==> building pinned UxPlay core (arm64)"
 SRC="$uxplay_src" BUILD="$core_build" ARCH=arm64 FRAMEWORK="$gst_framework" \

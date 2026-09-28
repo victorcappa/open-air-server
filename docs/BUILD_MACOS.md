@@ -47,8 +47,9 @@ GSTREAMER_FRAMEWORK=/path/to/GStreamer.framework ./scripts/build-macos-arm64.sh
 ./scripts/build-macos-arm64.sh
 ```
 
-The script builds `uxplay-core.dylib` directly from the pinned submodule and then
-assembles an ad-hoc-signed, self-contained application:
+The script copies the pinned submodule to `target/uxplay-source/macos`, applies
+the tracked macOS renderer overlay, builds `uxplay-core.dylib` from that prepared
+tree, and then assembles an ad-hoc-signed, self-contained application:
 
 ```text
 build/macos/dist/Air Server.app
