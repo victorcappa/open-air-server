@@ -1,4 +1,4 @@
-# Open Air Server — Cargo workspace.
+# Air Server — Cargo workspace.
 #   app/             the tray + host-window application (the binary)
 #   airplay-lib/     safe Rust wrapper over the engine's C ABI
 #   airplay-lib-sys/ raw FFI + runtime dlopen of uxplay-core.{dll,so,dylib}

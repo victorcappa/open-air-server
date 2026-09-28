@@ -181,7 +181,7 @@ mod imp {
     /// Quote an exe path for a Desktop Entry `Exec=` value (the spec requires
     /// quoting paths with spaces/reserved chars; inside double-quotes escape
     /// `"`, backtick, `$`, `\`). Without this an AppImage under `~/Applications`
-    /// or `/opt/Open Air Server/` breaks autostart.
+    /// or `/opt/Air Server/` breaks autostart.
     fn exec_quote(path: &std::path::Path) -> String {
         let mut out = String::from("\"");
         for c in path.to_string_lossy().chars() {

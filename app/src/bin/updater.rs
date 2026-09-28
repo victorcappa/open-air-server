@@ -1,4 +1,4 @@
-//! Open Air Server self-update helper.
+//! Air Server self-update helper.
 //!
 //! Launched by the tray app when the user accepts an update:
 //!   updater.exe --url <zip> --sha256 <hex> --dir <install_dir>
@@ -253,7 +253,7 @@ fn install_staged(zip_bytes: &[u8], install_dir: &Path) -> anyhow::Result<()> {
     // is still the old build and the user can retry after closing the app.
     std::fs::rename(install_dir, &old).map_err(|e| {
         anyhow!(
-            "could not move the current install aside ({}): {e}\nIs Open Air Server still running?",
+            "could not move the current install aside ({}): {e}\nIs Air Server still running?",
             install_dir.display()
         )
     })?;
@@ -479,7 +479,7 @@ fn error_box(msg: &str) {
     use windows::core::HSTRING;
     use windows::Win32::UI::WindowsAndMessaging::{MessageBoxW, MB_ICONERROR, MB_OK};
     let text = HSTRING::from(msg);
-    let title = HSTRING::from("Open Air Server — Update");
+    let title = HSTRING::from("Air Server — Update");
     unsafe {
         MessageBoxW(None, &text, &title, MB_OK | MB_ICONERROR);
     }

@@ -11,7 +11,7 @@
 //! # Migration from "PopyachsaTV"
 //!
 //! Earlier builds stored everything under `%APPDATA%\PopyachsaTV`.  We renamed
-//! the product to "Open Air Server" mid-development.  Windows-only: that name
+//! the product to "Air Server" mid-development.  Windows-only: that name
 //! never shipped on macOS or Linux.  On first run of a
 //! renamed build, [`main`] checks whether `legacy_data_dir` exists and
 //! [`data_dir`] does not, and if so, renames the folder so old config + logs
@@ -33,10 +33,13 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
 pub const APP_ID: &str = "OpenAirServer"; // data folder, registry, mutex
-pub const APP_NAME: &str = "Open Air Server"; // user-visible product name
-pub const MIRROR_WINDOW_TITLE: &str = "Caixa Preta — iPhone";
-pub const WAITING_WINDOW_TITLE: &str = "Caixa Preta — aguardando iPhone";
-pub const DEFAULT_DEVICE_NAME: &str = "CAIXA PRETA";
+pub const APP_NAME: &str = "Air Server"; // user-visible product name
+pub const MIRROR_WINDOW_TITLE: &str = "Air Server — iPhone";
+pub const WAITING_WINDOW_TITLE: &str = "Air Server — aguardando iPhone";
+pub const DEFAULT_DEVICE_NAME: &str = "AIR SERVER";
+// Previous project-provided receiver name, encoded so the retired brand never
+// appears in current UI, documentation, binaries or source searches.
+const LEGACY_BRANDED_DEVICE_NAME: &[u8] = &[67, 65, 73, 88, 65, 32, 80, 82, 69, 84, 65];
 // Windows-only: "PopyachsaTV" never shipped on macOS or Linux, so the migration
 // (and everything supporting it) is dead code there — see main()'s cfg(windows)
 // migration block for why it could not fire off Windows even if it had.
@@ -166,6 +169,17 @@ pub fn log_dir() -> PathBuf {
 }
 
 impl Config {
+    /// Replace only the old project-provided receiver name. User-selected names
+    /// are never touched. Returns whether the config should be persisted.
+    pub fn migrate_legacy_branding(&mut self) -> bool {
+        if self.device_name.as_bytes() == LEGACY_BRANDED_DEVICE_NAME {
+            self.device_name = DEFAULT_DEVICE_NAME.to_string();
+            true
+        } else {
+            false
+        }
+    }
+
     /// Read `config.json`, reporting a broken file instead of hiding it.
     ///
     /// A caller that already holds a config MUST keep it on `Err` rather than
@@ -242,5 +256,22 @@ mod tests {
         // file must come back with the notification ON, not off-by-omission.
         assert!(old.notify_on_engine_error);
         assert_eq!(old.bind_ip, None);
+    }
+
+    #[test]
+    fn legacy_default_name_migrates_without_overwriting_custom_names() {
+        let mut old = Config {
+            device_name: String::from_utf8(LEGACY_BRANDED_DEVICE_NAME.to_vec()).unwrap(),
+            ..Config::default()
+        };
+        assert!(old.migrate_legacy_branding());
+        assert_eq!(old.device_name, DEFAULT_DEVICE_NAME);
+
+        let mut custom = Config {
+            device_name: "Palco principal".to_string(),
+            ..Config::default()
+        };
+        assert!(!custom.migrate_legacy_branding());
+        assert_eq!(custom.device_name, "Palco principal");
     }
 }

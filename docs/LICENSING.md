@@ -1,6 +1,6 @@
 # Licensing
 
-Open Air Server is distributed under GPL-3.0-or-later because it is a modified
+Air Server is distributed under GPL-3.0-or-later because it is a modified
 version of Popyachsa AirPlay and links to the GPL UxPlay engine.
 
 ## What remains GPL

@@ -369,7 +369,7 @@ fn run_host_window(cfg: Config, running: Arc<AtomicBool>, stop_flag: Arc<AtomicB
             }
         );
 
-        let title = CString::new("Open Air Server").unwrap();
+        let title = CString::new("Air Server").unwrap();
         xlib::XStoreName(display, window, title.as_ptr());
 
         // WM_DELETE_WINDOW so the window's close button reaches us as a

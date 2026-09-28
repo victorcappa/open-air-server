@@ -1,4 +1,4 @@
-//! Open Air Server — system-tray AirPlay receiver with an in-process engine.
+//! Air Server — system-tray AirPlay receiver with an in-process engine.
 //!
 //! # What this process does
 //!
@@ -179,7 +179,7 @@ fn build_menu(running: bool, status: Status, topmost: bool, lang: i18n::Lang) ->
     let open_logs_item = MenuItem::new(t.open_logs, true, None);
     // This fork deliberately has no updater until it owns a signed release feed.
     // Keeping the disabled item makes the absence explicit without ever offering
-    // to install an upstream Popyachsa artifact over Open Air Server.
+    // to install an upstream Popyachsa artifact over Air Server.
     let check_updates_item = MenuItem::new(t.check_updates, false, None);
     let about_item = MenuItem::new(t.about, true, None);
     let quit_item = MenuItem::new(t.quit, true, None);
@@ -644,7 +644,7 @@ fn main() -> Result<()> {
     }
     if !args.iter().any(|a| a == "--settings" || a == "--about") {
         if !acquire_tray_single_instance() {
-            eprintln!("[popyachsa-airplay] another tray instance is already running");
+            eprintln!("[air-server] another tray instance is already running");
             return Ok(());
         }
     }
@@ -725,7 +725,15 @@ fn main() -> Result<()> {
         let _ = Config::default().save();
     }
 
-    let cfg = Arc::new(Mutex::new(Config::load()));
+    let mut loaded_cfg = Config::load();
+    if loaded_cfg.migrate_legacy_branding() {
+        if let Err(e) = loaded_cfg.save() {
+            eprintln!("[migrate] failed to persist Air Server receiver name: {e:#}");
+        } else {
+            eprintln!("[migrate] receiver name updated to AIR SERVER");
+        }
+    }
+    let cfg = Arc::new(Mutex::new(loaded_cfg));
 
     // Keep the autostart registry entry in sync with config on startup.
     autostart::sync(
@@ -902,7 +910,7 @@ fn main() -> Result<()> {
 
         match event {
             Event::NewEvents(StartCause::Init) => {
-                eprintln!("[popyachsa-airplay] event loop init -- creating tray icon");
+                eprintln!("[air-server] event loop init -- creating tray icon");
                 // macOS: create the mirror window now (loop is running -> the
                 // worker's dispatch_sync(main) overlay bind is safe), then honour
                 // autostart (deferred from before the loop: the NSView didn't
@@ -929,12 +937,12 @@ fn main() -> Result<()> {
                     .build()
                 {
                     Ok(t) => {
-                        eprintln!("[popyachsa-airplay] tray icon registered");
+                        eprintln!("[air-server] tray icon registered");
                         tray_icon = Some(t);
                         ids = Some(new_ids);
                     }
                     Err(e) => {
-                        eprintln!("[popyachsa-airplay] FAILED to build tray icon: {e}");
+                        eprintln!("[air-server] FAILED to build tray icon: {e}");
                     }
                 }
             }
@@ -1077,7 +1085,7 @@ fn main() -> Result<()> {
                     }
                     AppEvent::Tray(_ev) => { /* left-click could open menu later */ }
                     AppEvent::ConfigChanged => {
-                        eprintln!("[popyachsa-airplay] config.json changed -- reloading");
+                        eprintln!("[air-server] config.json changed -- reloading");
                         // A file we cannot parse is not a config change: keep the
                         // running config untouched and apply nothing. (The watcher
                         // fires on every write, so it also sees a save caught

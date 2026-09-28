@@ -1,4 +1,4 @@
-//! Settings window — `popyachsa-tv.exe --settings` spawns this in its own
+//! Settings window — the main Air Server process spawns this in its own
 //! process, runs an eframe event loop, lets the user edit Config, writes it
 //! back to disk and exits. The main tray's config-watcher then picks up the
 //! file change and restarts uxplay with the new flags.
@@ -496,7 +496,7 @@ impl eframe::App for SettingsApp {
                     self.section(ui, t.sec_advanced, |ui, edited| {
                         edited.check_updates_on_launch = false;
                         ui.label(RichText::new(
-                            "Updates are installed from the Open Air Server repository."
+                            "Updates are installed from the Air Server repository."
                         ).color(TEXT_DIM).size(12.0));
                         checkbox_row(ui, &mut edited.notify_on_engine_error,
                                      t.lbl_notify_errors,

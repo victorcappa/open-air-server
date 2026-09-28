@@ -1,4 +1,4 @@
-# Building Open Air Server
+# Building Air Server
 
 The supported target for the first release is Apple Silicon macOS.
 
@@ -12,7 +12,7 @@ cd open-air-server
 The output is an ad-hoc-signed, self-contained application at:
 
 ```text
-build/macos/dist/Open Air Server.app
+build/macos/dist/Air Server.app
 ```
 
 See [docs/BUILD_MACOS.md](docs/BUILD_MACOS.md) for dependencies, version

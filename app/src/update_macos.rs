@@ -271,7 +271,7 @@ mod tests {
     /// and an arbitrary write outside the bundle, so it gets the one check.
     #[test]
     fn symlink_targets_may_not_leave_the_bundle() {
-        let root = Path::new("/tmp/stage/Open Air Server.app");
+        let root = Path::new("/tmp/stage/Air Server.app");
         let frameworks = root.join("Contents/Frameworks");
         let ok = |base: &Path, t: &str| resolve_within(root, base, t).is_some();
 

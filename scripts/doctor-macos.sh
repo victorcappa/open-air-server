@@ -18,7 +18,7 @@ PKG_CONFIG_PATH="$joined_pkg_path${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
 export PKG_CONFIG_PATH
 
 if [ "$(uname -s)" != "Darwin" ]; then
-  echo "Open Air Server macOS doctor must run on macOS." >&2
+  echo "Air Server macOS doctor must run on macOS." >&2
   exit 1
 fi
 
@@ -72,4 +72,4 @@ if [ "$failed" -ne 0 ]; then
   exit 1
 fi
 
-echo "Open Air Server build prerequisites look ready."
+echo "Air Server build prerequisites look ready."

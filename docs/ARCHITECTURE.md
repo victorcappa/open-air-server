@@ -2,7 +2,7 @@
 
 ## Decision
 
-Open Air Server adapts Popyachsa AirPlay and its patched UxPlay engine. It does
+Air Server adapts Popyachsa AirPlay and its patched UxPlay engine. It does
 not reimplement the AirPlay protocol.
 
 ```text

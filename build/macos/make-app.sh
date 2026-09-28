@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# make-app.sh — assemble a self-contained "Open Air Server.app" on macOS.
+# make-app.sh — assemble a self-contained "Air Server.app" on macOS.
 #
-# Produces dist/Open Air Server.app with a TRIMMED, RELOCATED GStreamer runtime
+# Produces dist/Air Server.app with a TRIMMED, RELOCATED GStreamer runtime
 # bundled inside, so the app runs on a clean Mac with NO GStreamer.framework
 # installed. Ad-hoc codesigned (runnable on Apple Silicon) but NOT Developer-ID
 # signed/notarized — Gatekeeper needs a right-click->Open on first launch.
@@ -31,7 +31,7 @@ COPYING="$REPO/packaging/shared/COPYING"
 X86_DYLIB="${X86_DYLIB:-$HOME/uxplay-mac-build/UxPlay/build-x86_64/uxplay-core.dylib}"
 X86_BIN="${X86_BIN:-$REPO/target/x86_64-apple-darwin/release/open-air-server}"
 
-APP_NAME="Open Air Server"
+APP_NAME="Air Server"
 BUNDLE_ID="com.victorcappa.open-air-server"
 OUT="$REPO/build/macos/dist"
 APP="$OUT/$APP_NAME.app"
@@ -80,7 +80,7 @@ PLUGINS=(
   adaptivedemux2 soup mpegtsdemux isomp4
 )
 
-echo "==> Open Air Server.app  v$VERSION  ($TARGET)"
+echo "==> Air Server.app  v$VERSION  ($TARGET)"
 [ -f "$DYLIB" ] || { echo "missing dylib: $DYLIB (run build-core-arm64.sh)"; exit 1; }
 [ -d "$FRAMEWORK" ] || { echo "missing $FRAMEWORK (install official GStreamer.framework)"; exit 1; }
 
@@ -287,7 +287,7 @@ cat > "$C/Info.plist" <<PLIST
   <key>NSHighResolutionCapable</key><true/>
   <key>LSUIElement</key><true/>
   <key>NSLocalNetworkUsageDescription</key>
-  <string>Open Air Server receives AirPlay screen mirroring and audio from devices on your local network.</string>
+  <string>Air Server receives AirPlay screen mirroring and audio from devices on your local network.</string>
   <key>NSBonjourServices</key>
   <array><string>_airplay._tcp</string><string>_raop._tcp</string></array>
 </dict>

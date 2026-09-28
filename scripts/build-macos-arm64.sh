@@ -13,7 +13,7 @@ echo "==> building pinned UxPlay core (arm64)"
 SRC="$uxplay_src" BUILD="$core_build" ARCH=arm64 FRAMEWORK="$gst_framework" \
 bash "$repo_dir/build/macos/build-core-arm64.sh"
 
-echo "==> assembling Open Air Server.app (arm64)"
+echo "==> assembling Air Server.app (arm64)"
 DYLIB="$core_dylib" \
 X86_DYLIB="$repo_dir/.build-input-not-present/uxplay-core-x86_64.dylib" \
 X86_BIN="$repo_dir/.build-input-not-present/open-air-server-x86_64" \
@@ -21,4 +21,4 @@ TARGET=aarch64-apple-darwin \
 FRAMEWORK="$gst_framework" \
 bash "$repo_dir/build/macos/make-app.sh"
 
-echo "Built: $repo_dir/build/macos/dist/Open Air Server.app"
+echo "Built: $repo_dir/build/macos/dist/Air Server.app"

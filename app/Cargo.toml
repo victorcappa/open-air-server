@@ -1,8 +1,8 @@
 [package]
 name = "open-air-server"
-version = "0.2.15"
+version = "0.2.16"
 edition = "2021"
-authors = ["Open Air Server contributors", "Popyachsa AirPlay contributors"]
+authors = ["Air Server contributors", "Popyachsa AirPlay contributors"]
 description = "Local AirPlay receiver for macOS with an independent projector-ready window"
 license = "GPL-3.0-or-later"
 repository = "https://github.com/victorcappa/open-air-server"
@@ -102,5 +102,5 @@ winresource = "0.1"
 
 [package.metadata.winresource]
 OriginalFilename = "open-air-server.exe"
-ProductName      = "Open Air Server"
+ProductName      = "Air Server"
 FileDescription  = "AirPlay receiver tray manager"

@@ -1,6 +1,6 @@
-# Open Air Server
+# Air Server
 
-Open Air Server is a local, open-source AirPlay receiver focused on live
+Air Server is a local, open-source AirPlay receiver focused on live
 performance on macOS. An iPhone mirror appears as an ordinary independent Mac
 window: the operator can keep using the MacBook, move the mirror to an HDMI
 projector, capture it in OBS, or put only that window into borderless fullscreen.
@@ -9,6 +9,21 @@ The application is a GPL-3.0-or-later adaptation of
 [Popyachsa AirPlay](https://github.com/Recluse/Popyachsa-AirPlay), using its
 patched [UxPlay](https://github.com/FDH2/UxPlay) engine instead of implementing
 AirPlay from scratch.
+
+## Download and install
+
+The ready-to-use Apple Silicon build is on the
+[latest GitHub release](https://github.com/victorcappa/open-air-server/releases/latest).
+
+1. Download `Air-Server-0.2.16.dmg`.
+2. Open the DMG and drag **Air Server** to **Applications**.
+3. On the first launch, Control-click **Air Server**, choose **Open**, then
+   confirm. The current community build is ad-hoc signed and not Apple-notarized.
+4. On the iPhone, open Control Center → Screen Mirroring → **AIR SERVER**.
+
+The application bundle contains its media runtime. End users do not need Rust,
+Homebrew, GStreamer, Terminal commands, an account, or an internet connection.
+The published macOS build currently requires Apple Silicon and macOS 11 or newer.
 
 ## Current MVP
 
@@ -28,8 +43,22 @@ AirPlay from scratch.
 - Local config and logs under `~/Library/Application Support/OpenAirServer`.
 - No account, cloud dependency, telemetry or automatic updater.
 
-The app stays hidden until a device connects. Closing the mirror window drops
-the current session and immediately returns the receiver to its ready state.
+The app opens a clear waiting window, then uses that same independent window for
+the iPhone video. Closing it drops the current session while the receiver keeps
+running from the menu bar.
+
+## Network requirements
+
+Internet access is not required. The released version uses AirPlay over a local
+network, so the Mac and iPhone must currently share the same Wi-Fi/LAN. A small
+dedicated travel router is the most predictable setup for a venue and continues
+working even when its internet/WAN connection is unplugged.
+
+Current upstream UxPlay has experimental direct AWDL support through `-p2p`,
+which can work without a shared router. Air Server's pinned, field-tested UxPlay
+1.73.6 integration does not yet include that code, so the 0.2.16 release does
+not claim router-free operation. See [Show operation](docs/OPERATIONS.md) for the
+supported setup and fallback guidance.
 
 ## Build on Apple Silicon
 
@@ -49,7 +78,7 @@ development framework. Detailed setup is in [docs/BUILD_MACOS.md](docs/BUILD_MAC
 The output is:
 
 ```text
-build/macos/dist/Open Air Server.app
+build/macos/dist/Air Server.app
 ```
 
 The local build is ad-hoc signed. On first launch, use Finder's **Open** command
@@ -63,7 +92,7 @@ notarization.
 3. Open Settings, select the projector under **Display**, enable **Fullscreen**
    and **Borderless**, then restart the receiver.
 4. On the iPhone, open Control Center, choose Screen Mirroring, and select
-   **CAIXA PRETA**.
+   **AIR SERVER**.
 5. Keep the MacBook display for the operator. The mirror window is placed on the
    selected display and uses borderless fullscreen there.
 
@@ -85,7 +114,7 @@ See [docs/OPERATIONS.md](docs/OPERATIONS.md) for recovery and fallback steps.
 
 ## License
 
-Open Air Server is licensed under **GPL-3.0-or-later**. UxPlay, the Rust host
+Air Server is licensed under **GPL-3.0-or-later**. UxPlay, the Rust host
 application and modifications distributed together must remain available under
 compatible GPL terms. See [LICENSE](LICENSE), [NOTICE](NOTICE), and
 [docs/LICENSING.md](docs/LICENSING.md).

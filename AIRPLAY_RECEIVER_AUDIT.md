@@ -19,7 +19,7 @@ The source-level findings and repository links are recorded in
 Popyachsa already supplies the strongest implementation path for the required
 MVP: AirPlay mirroring over LAN, a resizable independent macOS window,
 VideoToolbox decoding, audio, runtime orientation changes, reconnect handling,
-and a self-contained application bundle. Open Air Server adds the missing macOS
+and a self-contained application bundle. Air Server adds the missing macOS
 display enumeration and projector selection behavior.
 
 Source inspection and local arm64 builds do not prove the complete target flow.
@@ -28,7 +28,7 @@ latency and reconnect behavior remain physical rehearsal gates.
 
 ## 3. License
 
-UxPlay and Popyachsa are GPL. Open Air Server therefore remains
+UxPlay and Popyachsa are GPL. Air Server therefore remains
 GPL-3.0-or-later, preserves notices, publishes the corresponding source and
 ships the GPL text in the app. Details are in
 [docs/LICENSING.md](docs/LICENSING.md).
@@ -42,8 +42,8 @@ UxPlay core owns discovery, protocol handling and media delivery. See
 
 ## 5. Current implementation
 
-- Default advertised receiver name: `CAIXA PRETA`.
-- Predictable mirror-window title: `Caixa Preta — iPhone`.
+- Default advertised receiver name: `AIR SERVER`.
+- Predictable mirror-window title: `Air Server — iPhone`.
 - Windowed startup on macOS; no automatic fullscreen.
 - Resizable independent window with preserved aspect ratio.
 - VideoToolbox H.264/H.265 path and bundled GStreamer runtime.

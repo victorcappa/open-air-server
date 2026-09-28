@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# make-dmg.sh — wrap dist/Open Air Server.app into a drag-to-install DMG.
+# make-dmg.sh — wrap dist/Air Server.app into a drag-to-install DMG.
 #
-# Produces dist/Open-Air-Server-<version>.dmg with the .app + an /Applications
+# Produces dist/Air-Server-<version>.dmg with the .app + an /Applications
 # symlink and a tidy icon layout. The .app is ad-hoc signed (not Developer ID), so
 # a DOWNLOADED copy is quarantined -> first launch needs right-click -> Open.
 set -euo pipefail
@@ -10,14 +10,14 @@ REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 APPDIR="$REPO/app"
 VERSION="${VERSION:-$(grep -m1 '^version' "$APPDIR/Cargo.toml" | sed 's/.*"\(.*\)".*/\1/')}"
 OUT="$REPO/build/macos/dist"
-APP="$OUT/Open Air Server.app"
-VOL="Open Air Server"
-DMG="$OUT/Open-Air-Server-$VERSION.dmg"
+APP="$OUT/Air Server.app"
+VOL="Air Server"
+DMG="$OUT/Air-Server-$VERSION.dmg"
 
 [ -d "$APP" ] || { echo "no .app at $APP — run make-app.sh first"; exit 1; }
 
 echo "==> staging DMG contents"
-STAGE="$(mktemp -d)/Open Air Server"
+STAGE="$(mktemp -d)/Air Server"
 mkdir -p "$STAGE"
 cp -R "$APP" "$STAGE/"
 ln -s /Applications "$STAGE/Applications"
@@ -42,7 +42,7 @@ tell application "Finder"
     set theViewOptions to the icon view options of container window
     set arrangement of theViewOptions to not arranged
     set icon size of theViewOptions to 128
-    set position of item "Open Air Server.app" of container window to {150, 190}
+    set position of item "Air Server.app" of container window to {150, 190}
     set position of item "Applications" of container window to {410, 190}
     update without registering applications
     delay 1

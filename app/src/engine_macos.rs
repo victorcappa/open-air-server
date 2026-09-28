@@ -427,7 +427,7 @@ impl Engine {
         })?;
         let root = unsafe { &*(nsview as *const NSView) };
         let text = NSString::from_str(
-            "AGUARDANDO IPHONE\n\nNo iPhone: Central de Controle → Espelhamento de Tela → CAIXA PRETA",
+            "AGUARDANDO IPHONE\n\nNo iPhone: Central de Controle → Espelhamento de Tela → AIR SERVER",
         );
         let waiting_label = NSTextField::wrappingLabelWithString(&text, mtm);
         waiting_label.setFrame(root.bounds());

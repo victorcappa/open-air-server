@@ -189,7 +189,7 @@ extern "C" fn engine_log_cb(_level: c_int, msg: *const c_char, _user: *mut c_voi
 }
 
 const HOST_CLASS: windows::core::PCWSTR = w!("OpenAirServerHostWindow");
-const HOST_TITLE: windows::core::PCWSTR = w!("Open Air Server");
+const HOST_TITLE: windows::core::PCWSTR = w!("Air Server");
 
 /// Resolve `uxplay-core.dll`: next to our exe (the dist layout), else fall back to
 /// a bare name and let the loader search path (PATH / the app dir) find it.

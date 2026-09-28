@@ -37,7 +37,7 @@ Audited repository:
 - Supports macOS Apple Silicon and Intel builds, although universal packaging
   requires additional x86_64 dependency work.
 - Its macOS display selector was incomplete: monitor enumeration only existed on
-  Windows. Open Air Server implements the missing CoreGraphics backend and
+  Windows. Air Server implements the missing CoreGraphics backend and
   applies the selection before fullscreen.
 
 Conclusion: best available base. It already solves the risky AirPlay/window

@@ -51,7 +51,7 @@ The script builds `uxplay-core.dylib` directly from the pinned submodule and the
 assembles an ad-hoc-signed, self-contained application:
 
 ```text
-build/macos/dist/Open Air Server.app
+build/macos/dist/Air Server.app
 ```
 
 ## Verification boundaries
