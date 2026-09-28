@@ -301,11 +301,14 @@ cat > "$C/Info.plist" <<PLIST
 </plist>
 PLIST
 
-# ---- 6. icon (png -> icns) ---------------------------------------------------
-if [ -f "$ICON_PNG" ]; then
-  sips -s format icns "$ICON_PNG" --out "$C/Resources/$ICNS" >/dev/null 2>&1 \
-    || echo "   WARN: icon conversion failed (icon optional)"
-fi
+# ---- 6. application icon -----------------------------------------------------
+[ -f "$ICON_PNG" ] || { echo "missing application icon: $ICON_PNG" >&2; exit 1; }
+sips -s format icns "$ICON_PNG" --out "$C/Resources/$ICNS" >/dev/null 2>&1
+[ -s "$C/Resources/$ICNS" ] && \
+  sips -g format "$C/Resources/$ICNS" 2>/dev/null | grep -q 'format: icns' || {
+  echo "failed to generate a valid $ICNS" >&2
+  exit 1
+}
 
 # ---- 6b. licence (GPL-3 §4: recipients must get a copy of the licence) -------
 [ -f "$COPYING" ] || { echo "missing $COPYING — GPL-3 text must ship with the binaries"; exit 1; }

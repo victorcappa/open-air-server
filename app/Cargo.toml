@@ -1,6 +1,6 @@
 [package]
 name = "open-air-server"
-version = "0.2.21"
+version = "0.2.22"
 edition = "2021"
 authors = ["Air Server contributors", "Popyachsa AirPlay contributors"]
 description = "Local AirPlay receiver for macOS with an independent projector-ready window"
@@ -85,7 +85,7 @@ raw-window-handle = "0.6"
 # wrappers for AppKit objects.
 objc2 = { version = "0.6.4", default-features = false, features = ["std"] }
 objc2-app-kit = { version = "0.3.2", default-features = false, features = [
-    "std", "NSCell", "NSColor", "NSControl", "NSFont", "NSFontDescriptor",
+    "std", "NSApplication", "NSCell", "NSColor", "NSControl", "NSFont", "NSFontDescriptor",
     "libc", "NSResponder", "NSRunningApplication", "NSText", "NSTextField", "NSView",
     "objc2-quartz-core",
 ] }

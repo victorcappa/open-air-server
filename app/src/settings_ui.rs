@@ -74,6 +74,19 @@ pub fn run(initial: Config) -> Result<(), eframe::Error> {
         return Ok(());
     }
 
+    // The receiver process is intentionally an accessory/menu-bar app, but the
+    // separate Settings process owns a normal user-facing window. Give that
+    // process a Dock presence so the window has the expected app icon and can
+    // be found with Cmd-Tab. It disappears again when Settings closes, while
+    // the receiver keeps running in the menu bar.
+    #[cfg(target_os = "macos")]
+    if let Some(mtm) = objc2::MainThreadMarker::new() {
+        use objc2_app_kit::{NSApplication, NSApplicationActivationPolicy};
+        let app = NSApplication::sharedApplication(mtm);
+        app.setActivationPolicy(NSApplicationActivationPolicy::Regular);
+        app.activate();
+    }
+
     // Load the .ico for the window title-bar icon.
     let icon_data = image::load_from_memory(APP_ICON_PNG).ok().map(|i| {
         let rgba = i.to_rgba8();
