@@ -15,7 +15,7 @@ AirPlay from scratch.
 The ready-to-use Apple Silicon build is on the
 [latest GitHub release](https://github.com/victorcappa/open-air-server/releases/latest).
 
-1. Download `Air-Server-0.2.18.dmg`.
+1. Download `Air-Server-0.2.19.dmg`.
 2. Open the DMG and drag **Air Server** to **Applications**.
 3. On the first launch, Control-click **Air Server**, choose **Open**, then
    confirm. The current community build is ad-hoc signed and not Apple-notarized.
@@ -33,6 +33,8 @@ The published macOS build currently requires Apple Silicon and macOS 11 or newer
   background supplied by the video layer.
 - VideoToolbox hardware decoding, H.264/H.265 selection and live portrait /
   landscape rotation.
+- Selectable 720p, 1080p, 1440p and 4K sender resolution, plus maximum frame
+  rate and decoder controls. 1080p remains the balanced default.
 - Low-latency macOS path: 1080p60 sender request, one-frame decoded queue and
   reusable IOSurface-backed display buffers.
 - Tray states for off, ready and connected, plus start, stop, restart and logs.

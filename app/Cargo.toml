@@ -1,6 +1,6 @@
 [package]
 name = "open-air-server"
-version = "0.2.18"
+version = "0.2.19"
 edition = "2021"
 authors = ["Air Server contributors", "Popyachsa AirPlay contributors"]
 description = "Local AirPlay receiver for macOS with an independent projector-ready window"

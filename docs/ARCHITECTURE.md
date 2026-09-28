@@ -36,6 +36,11 @@ The engine reports connection, teardown and incoming dimensions through its log
 callback. The host uses those events to show or hide the mirror and to resize it
 when the iPhone rotates.
 
+The requested sender size is a validated settings preset: 720p, 1080p, 1440p or
+4K, all advertised with a 60 Hz display profile. The existing maximum-frame-rate
+control remains independent. Unknown values from a hand-edited configuration
+fall back to 1080p before command-line arguments are built.
+
 ## Projector mode
 
 macOS displays are enumerated through CoreGraphics. The operator chooses a

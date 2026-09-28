@@ -210,10 +210,10 @@ fn set_bundled_gst_env() {
 }
 
 /// Build the UxPlay option tail for macOS (device name goes via set_device_name).
-/// The sender is explicitly capped at 1080p60: UxPlay otherwise advertises 4K
-/// whenever H.265 is enabled, which adds encoder, network, conversion and copy
-/// pressure without helping the usual projector/window output. VideoToolbox
-/// decodes in hardware; `-vsync no` and the custom avlayer sink render ASAP.
+/// The sender resolution is an explicit, validated user choice (1080p60 by
+/// default, rather than UxPlay's automatic 4K profile when H.265 is enabled).
+/// VideoToolbox decodes in hardware; `-vsync no` and the custom avlayer sink
+/// render ASAP.
 fn build_options(cfg: &Config) -> String {
     let mut a: Vec<String> = Vec::new();
     if cfg.debug_logging {
@@ -224,7 +224,7 @@ fn build_options(cfg: &Config) -> String {
             .iter()
             .map(|s| s.to_string()),
     );
-    a.extend(["-s".into(), "1920x1080@60".into()]);
+    a.extend(["-s".into(), cfg.video_size_arg().into()]);
     a.extend(["-fps".into(), cfg.target_fps.to_string()]);
     a.extend(["-vsync".into(), "no".into()]);
     if cfg.enable_h265 {
@@ -289,6 +289,19 @@ mod option_tests {
         assert!(options.contains("-p2p"));
         assert!(!options.contains("-bind"));
         assert!(!options.contains("-FPSdata"));
+    }
+
+    #[test]
+    fn applies_selected_resolution_before_user_overrides() {
+        let cfg = Config {
+            video_resolution: "1280x720".to_string(),
+            custom_flags: "-s 3840x2160@60".to_string(),
+            ..Config::default()
+        };
+        let options = build_options(&cfg);
+        assert!(
+            options.find("-s 1280x720@60").unwrap() < options.rfind("-s 3840x2160@60").unwrap()
+        );
     }
 
     #[test]

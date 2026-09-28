@@ -401,6 +401,41 @@ impl eframe::App for SettingsApp {
                         checkbox_row(ui, &mut edited.borderless,
                                      t.lbl_borderless,
                                      t.help_borderless);
+                        let portuguese = crate::i18n::Lang::from_config(&edited.language)
+                            == crate::i18n::Lang::PtBr;
+                        labelled_row(
+                            ui,
+                            if portuguese { "Resolução" } else { "Resolution" },
+                            if portuguese {
+                                "Resolução solicitada ao iPhone. 720p reduz carga e atraso; 1080p é o padrão recomendado; 1440p e 4K priorizam definição."
+                            } else {
+                                "Resolution requested from the iPhone. 720p reduces load and latency; 1080p is recommended; 1440p and 4K prioritize detail."
+                            },
+                            |ui| {
+                                let opts: &[(&str, &str)] = &[
+                                    ("HD 720p — 1280 × 720", "1280x720"),
+                                    ("Full HD 1080p — 1920 × 1080", "1920x1080"),
+                                    ("QHD 1440p — 2560 × 1440", "2560x1440"),
+                                    ("4K UHD — 3840 × 2160", "3840x2160"),
+                                ];
+                                let current = opts
+                                    .iter()
+                                    .find(|(_, value)| *value == edited.video_resolution)
+                                    .map(|(label, _)| *label)
+                                    .unwrap_or(opts[1].0);
+                                egui::ComboBox::from_id_salt("video_resolution")
+                                    .selected_text(current)
+                                    .show_ui(ui, |ui| {
+                                        for &(label, value) in opts {
+                                            ui.selectable_value(
+                                                &mut edited.video_resolution,
+                                                value.to_string(),
+                                                label,
+                                            );
+                                        }
+                                    });
+                            },
+                        );
                         // Linux v1 still forces h264 because this UxPlay fork
                         // asserts on h265 reconnect. Windows and macOS support it.
                         #[cfg(any(windows, target_os = "macos"))]

@@ -1115,6 +1115,7 @@ fn main() -> Result<()> {
                         let needs_restart = {
                             let old = cfg.lock().unwrap_or_else(|e| e.into_inner());
                             old.device_name != new_cfg.device_name
+                                || old.video_resolution != new_cfg.video_resolution
                                 || old.target_fps != new_cfg.target_fps
                                 || old.enable_h265 != new_cfg.enable_h265
                                 || old.video_decoder != new_cfg.video_decoder

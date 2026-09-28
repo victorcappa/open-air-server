@@ -143,6 +143,7 @@ fn build_options(cfg: &Config, video_sink: &str) -> String {
         a.push("-d".into());
     }
     a.extend(["-nh", "-nohold", "-nc"].iter().map(|s| s.to_string()));
+    a.extend(["-s".into(), cfg.video_size_arg().into()]);
     a.extend(["-fps".into(), cfg.target_fps.to_string()]);
     a.extend(["-vsync".into(), "no".into()]);
     // h265 (HEVC) — this is what unlocks 4K: UxPlay advertises 3840x2160 only when

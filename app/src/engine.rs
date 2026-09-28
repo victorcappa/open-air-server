@@ -219,6 +219,7 @@ fn build_options(cfg: &Config) -> String {
             .iter()
             .map(|s| s.to_string()),
     );
+    a.extend(["-s".into(), cfg.video_size_arg().into()]);
     a.extend(["-fps".into(), cfg.target_fps.to_string()]);
     a.extend(["-vsync".into(), "no".into()]);
     if cfg.enable_h265 {

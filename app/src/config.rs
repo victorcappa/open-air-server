@@ -55,6 +55,9 @@ pub struct Config {
     pub autostart_with_windows: bool,
     pub autostart_on_app_launch: bool,
     pub fullscreen: bool,
+    /// Requested AirPlay sender frame size. Unknown hand-edited values safely
+    /// fall back to 1080p instead of becoming command-line input.
+    pub video_resolution: String,
     pub target_fps: u32,
     pub enable_h265: bool,
     /// Hardware video decoder: "d3d11" (DXVA, any GPU), "d3d12" (DXVA, any GPU),
@@ -106,6 +109,7 @@ impl Default for Config {
             // macOS opens WINDOWED by default (owner's choice); Windows/Linux keep
             // fullscreen-on-connect. The Settings checkbox controls it either way.
             fullscreen: !cfg!(target_os = "macos"),
+            video_resolution: "1920x1080".to_string(),
             target_fps: 120,
             enable_h265: true,
             // Per-OS sensible defaults; the Settings UI shows OS-appropriate
@@ -169,6 +173,17 @@ pub fn log_dir() -> PathBuf {
 }
 
 impl Config {
+    /// Validated UxPlay `-s` value. AirPlay senders expect a 60 Hz display
+    /// profile; `target_fps` independently controls the maximum stream FPS.
+    pub fn video_size_arg(&self) -> &'static str {
+        match self.video_resolution.as_str() {
+            "1280x720" => "1280x720@60",
+            "2560x1440" => "2560x1440@60",
+            "3840x2160" => "3840x2160@60",
+            _ => "1920x1080@60",
+        }
+    }
+
     /// Replace only the old project-provided receiver name. User-selected names
     /// are never touched. Returns whether the config should be persisted.
     pub fn migrate_legacy_branding(&mut self) -> bool {
@@ -256,6 +271,29 @@ mod tests {
         // file must come back with the notification ON, not off-by-omission.
         assert!(old.notify_on_engine_error);
         assert_eq!(old.bind_ip, None);
+        assert_eq!(old.video_resolution, "1920x1080");
+        assert_eq!(old.video_size_arg(), "1920x1080@60");
+    }
+
+    #[test]
+    fn resolution_is_allow_listed_before_reaching_the_engine() {
+        for (saved, arg) in [
+            ("1280x720", "1280x720@60"),
+            ("1920x1080", "1920x1080@60"),
+            ("2560x1440", "2560x1440@60"),
+            ("3840x2160", "3840x2160@60"),
+        ] {
+            let cfg = Config {
+                video_resolution: saved.to_string(),
+                ..Config::default()
+            };
+            assert_eq!(cfg.video_size_arg(), arg);
+        }
+        let cfg = Config {
+            video_resolution: "1920x1080 -d".to_string(),
+            ..Config::default()
+        };
+        assert_eq!(cfg.video_size_arg(), "1920x1080@60");
     }
 
     #[test]
